@@ -8,6 +8,7 @@ import (
 	"sync"
 	"syscall"
 	commands "uneex/core"
+	postgres "uneex/databases"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-ini/ini"
@@ -30,6 +31,7 @@ func Config(name string, section ...string) string {
 
 func init() {
 	// Perform initial operations, opening databases and checking config files
+	fmt.Println(postgres.Test())
 	// Greet in console when ready
 	fmt.Println("Starting Uneex bot")
 }
