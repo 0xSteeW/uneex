@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -45,13 +46,10 @@ func main() {
 	fmt.Println(Config("Version"))
 	// Open database for use
 	databases.Database, err = sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", Config("User", "Maria"), Config("Password", "Maria"), Config("Name", "Maria")))
-	// FIXME
-	res, err := databases.ExecSafe(`insert into test values('baz')`)
 	if err != nil {
-		fmt.Println(err.Error())
+		panic(err)
 	}
-	fmt.Println(res.RowsAffected())
-
+	// Create discord bot session and handle any errors adequately
 	client, err := discordgo.New("Bot " + Config("Token", "Owner"))
 	if err != nil {
 		panic(err)
@@ -63,12 +61,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	// Handle syscalls to quit bot gracefully and close database connection
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
 	// Close connections
-	Database.Close()
+	databases.Database.Close()
 	client.Close()
 }
 
@@ -87,7 +85,6 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 	if message.Mentions != nil {
 		Mentions = message.Mentions
 	}
-	Mentions = Mentions // FIXME temporary assignment
 	// Handle the rest of the command, it should have the prefix trimmed as well as the mentions
 	CommandHandler(client, message, Content, Mentions)
 }
@@ -116,6 +113,29 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		} else {
 			client.ChannelMessageSend(origin, "Sorry, I don't think you have enough permissions to use this.")
 		}
+	case "cron":
+		// Check maximum crons for the user, should be 1 by default
+		cronJobs, err := databases.SafeQuery(`select cron_jobs from users where user_id=?`, message.Author.ID)
+		if err != nil {
+			client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
+			return
+		}
+		// FIXME temporarily assigning only 1 job
+		cronJobsInt, err := strconv.Atoi(cronJobs[0])
+		if err != nil {
+			client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
+			return
+		}
+		maxCronJobs, err := strconv.Atoi(Config("MaxCronJobs", "Default"))
+		if err != nil {
+			client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
+			return
+		}
+		if cronJobsInt == maxCronJobs {
+			client.ChannelMessageSend("You have reached your maximum Cron Job limit.")
+			return
+		}
+		exported.NewCron(databases.Database, content)
 	default:
 		return
 	}
