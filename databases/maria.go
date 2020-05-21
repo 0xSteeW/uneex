@@ -1,5 +1,5 @@
 package maria
 
 func Test() string {
-	return Config()
+	return "done"
 }

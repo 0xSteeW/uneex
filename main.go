@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"os/signal"
@@ -12,12 +13,14 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-ini/ini"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 // Globals
 
 var conf *ini.File
 var mutex = &sync.Mutex{}
+var Database *sql.DB
 var sc chan os.Signal = make(chan os.Signal, 1)
 
 func Config(name string, section ...string) string {
@@ -38,8 +41,23 @@ func init() {
 
 func main() {
 	// Open config ini file by marshaling with ini.Load()
+	var err error
 	conf, _ = ini.Load("config.ini")
 	fmt.Println(Config("Version"))
+	// Open database for use
+	Database, err = sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", Config("User", "Maria"), Config("Password", "Maria"), Config("Name", "Maria")))
+	// FIXME
+	res, err := Database.Exec(`insert into test values('foobar')`)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	fmt.Println(res.RowsAffected())
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	if err != nil {
+		panic(err)
+	}
 	client, err := discordgo.New("Bot " + Config("Token", "Owner"))
 	if err != nil {
 		panic(err)
@@ -55,6 +73,8 @@ func main() {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
+	// Close connections
+	Database.Close()
 	client.Close()
 }
 
