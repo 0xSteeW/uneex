@@ -34,7 +34,6 @@ func Config(name string, section ...string) string {
 
 func init() {
 	// Perform initial operations, opening databases and checking config files
-	fmt.Println(databases.Test())
 	// Greet in console when ready
 	fmt.Println("Starting Uneex bot")
 }
@@ -45,19 +44,14 @@ func main() {
 	conf, _ = ini.Load("config.ini")
 	fmt.Println(Config("Version"))
 	// Open database for use
-	Database, err = sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", Config("User", "Maria"), Config("Password", "Maria"), Config("Name", "Maria")))
+	databases.Database, err = sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", Config("User", "Maria"), Config("Password", "Maria"), Config("Name", "Maria")))
 	// FIXME
-	res, err := Database.Exec(`insert into test values('foobar')`)
+	res, err := databases.ExecSafe(`insert into test values('baz')`)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
 	fmt.Println(res.RowsAffected())
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	if err != nil {
-		panic(err)
-	}
+
 	client, err := discordgo.New("Bot " + Config("Token", "Owner"))
 	if err != nil {
 		panic(err)
