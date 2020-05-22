@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 	commands "uneex/core"
+	cron "uneex/cron"
 	databases "uneex/databases"
 
 	"github.com/bwmarrin/discordgo"
@@ -58,6 +59,9 @@ func main() {
 	client.AddHandler(OnMessageCreate)
 	// Client session should be open now if no errors had occurred
 	err = client.Open()
+	// Start cron handler
+	stop := make(chan bool)
+	go cron.Worker(stop, client)
 	if err != nil {
 		panic(err)
 	}
@@ -103,7 +107,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	// Global variables to use
 	origin := message.ChannelID
 	exported := commands.ExportedSession{Client: client, Message: message}
-	switch strings.ToLower(content) {
+	command := strings.Split(content, " ")[0]
+	content = strings.TrimPrefix(content, command+" ")
+	buff := new(commands.Buffer)
+	switch strings.ToLower(command) {
 	case "ping":
 		exported.Ping()
 	case "shutdown":
@@ -113,15 +120,23 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		} else {
 			client.ChannelMessageSend(origin, "Sorry, I don't think you have enough permissions to use this.")
 		}
+
+	case "pipe":
+		buff.Pipes = strings.Split(content, "|")
+		buff.HandleEachPipe(exported)
+	case "push":
+		buff.Content = content
+		client.ChannelMessageSend(origin, "Successfully pushed to current buffer")
+	case "cat":
+		exported.Cat(buff)
 	case "cron":
 		// Check maximum crons for the user, should be 1 by default
-		cronJobs, err := databases.SafeQuery(`select cron_jobs from users where user_id=?`, message.Author.ID)
+		cronJobs, err := databases.SafeQuery(`select timestamp from jobs where user=?`, message.Author.ID)
 		if err != nil {
 			client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
 			return
 		}
 		// FIXME temporarily assigning only 1 job
-		cronJobsInt, err := strconv.Atoi(cronJobs[0])
 		if err != nil {
 			client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
 			return
@@ -131,11 +146,12 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 			client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
 			return
 		}
-		if cronJobsInt == maxCronJobs {
-			client.ChannelMessageSend("You have reached your maximum Cron Job limit.")
+		if len(cronJobs) == maxCronJobs {
+			client.ChannelMessageSend(origin, fmt.Sprintf("You have reached your maximum Cron Job limit. Your next remind is at: ", cronJobs[0]))
 			return
 		}
-		exported.NewCron(databases.Database, content)
+		client.ChannelMessageSend(origin, "Adding...")
+		exported.NewCron(content)
 	default:
 		return
 	}
