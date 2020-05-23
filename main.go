@@ -52,6 +52,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Client started")
 	// Handle syscalls to quit bot gracefully and close database connection
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc

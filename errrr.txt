@@ -1,0 +1,2 @@
+# uneex/core
+core/commands.go:244:35: syntax error: unexpected %, expecting expression

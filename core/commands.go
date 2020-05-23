@@ -39,13 +39,58 @@ func Shutdown(buffer *Buffer) {
 	Client.ChannelMessageSend(Message.ChannelID, "Shutdown requested, proceeding...")
 }
 
-func Cat(buffer *Buffer) {
-	fmt.Println("Received cat")
-	Client.ChannelMessageSend(Message.ChannelID, buffer.Content)
+func Print(buffer *Buffer) {
+	if buffer.Content == "" {
+		return
+	}
+	var commands string
+	for _, cmd := range buffer.Pipes {
+		commands = commands + cmd + " "
+	}
+	fieldCommands := &discordgo.MessageEmbedField{Name: "Issued commands", Value: commands}
+	fieldResult := &discordgo.MessageEmbedField{Name: ">", Value: buffer.Content}
+	fields := []*discordgo.MessageEmbedField{fieldCommands, fieldResult}
+	embed := &discordgo.MessageEmbed{Title: "Result:", Fields: fields}
+	_, err := Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
+	if err != nil {
+		Client.ChannelMessageSend(Message.ChannelID, err.Error())
+	}
 }
 
-func Substitute(buffer *Buffer) {
-	buffer.Content = strings.ReplaceAll(buffer.Content, "a", "7")
+func Capitalize(buffer *Buffer) {
+	buffer.Content = strings.ToUpper(buffer.Content)
+}
+
+func Lower(buffer *Buffer) {
+	buffer.Content = strings.ToLower(buffer.Content)
+}
+
+func Count(buffer *Buffer) {
+	runeArr := []rune(buffer.Content)
+	buffer.Content = strconv.Itoa(len(runeArr))
+}
+
+func Substitute(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	// Grab old string until -n
+	flags := strings.Split(content, "-n")
+	if len(flags) == 1 {
+		buffer.Content = "New string wasn't provided"
+		return
+	}
+	// Operator on the left of the split string is the old flag, the right one contains the new and the actual content, so lets split again
+	old := strings.TrimSpace(flags[0])
+	new := strings.TrimSpace(flags[1])
+	buffer.Content = strings.ReplaceAll(buffer.Content, old, new)
+}
+
+func Debug(buffer *Buffer) {
+	info := fmt.Sprintf("Operations: %d, Errors: %d", len(buffer.Pipes), buffer.Errors)
+	buffer.Content = info
+}
+
+func Cat(buffer *Buffer, content string) {
+	buffer.Content = buffer.Content + OnlyRemoveCommand(content)
 }
 
 func NewCron(content string, buffer *Buffer) {
@@ -73,9 +118,14 @@ func NewCron(content string, buffer *Buffer) {
 	Client.ChannelMessageSend(Message.ChannelID, "Succesfully added remind for "+timeStampParse.String()+" with content: "+remindLiteral)
 }
 
-func RemoveCommand(cmd string) string {
+func OnlyRemoveCommand(cmd string) string {
 	cmds := strings.Split(cmd, " ")
 	return strings.TrimPrefix(cmd, cmds[0])
+}
+
+func RemoveCommand(cmd string) string {
+	cmds := strings.Split(cmd, " ")
+	return strings.TrimSpace(strings.TrimPrefix(cmd, cmds[0]))
 }
 
 type Bufferable interface {
@@ -87,6 +137,7 @@ type Buffer struct {
 	Content string
 	Pipes   []string
 	Next    []string
+	Errors  int
 }
 
 func (buff *Buffer) Pop() {
@@ -99,7 +150,11 @@ func Transfer(origin, destination *Buffer) {
 
 func (buff *Buffer) CreateWithPipes(content string) {
 	buff.Pipes = strings.Split(content, "|")
-	buff.Next = buff.Pipes
+	if len(buff.Pipes) <= 1 {
+		buff.Next = []string{content}
+	} else {
+		buff.Next = buff.Pipes
+	}
 	buff.Clean()
 }
 
@@ -108,17 +163,29 @@ func (buff *Buffer) Print() {
 	for _, p := range buff.Next {
 		tmp = tmp + p
 	}
-	fmt.Println(">" + tmp)
 }
 
 func (buff *Buffer) HandleEachPipe() {
-	buff.Pop()
+	// buff.Pop()
+	// //FIXME only for &pipe
+	maxPipes, _ := strconv.Atoi(config.Config("MaxPipes", "Default"))
+	if len(buff.Next) >= maxPipes {
+		Client.ChannelMessageSend(Message.ChannelID, "Sorry, you've have reached the maximum pipe limit: "+config.Config("MaxPipes", "Default"))
+		return
+	}
 	for _, next := range buff.Next {
-		// TODO
-		// buff.Print()
+		cmds := strings.Split(next, " ")
+		if cmds[0] == "&pipe" {
+			continue
+		}
 		CommandHandler(Client, Message, next, Mentions, *SC, buff)
 		buff.Pop()
 	}
+	// By default print if the buffer is on the end
+	if buff.Errors != 0 {
+		return
+	}
+	Print(buff)
 }
 
 func (buff *Buffer) Clean() {
@@ -147,15 +214,19 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	var buff *Buffer
 	if len(currentBuffer) == 0 {
 		buff = new(Buffer)
+		buff.CreateWithPipes(content)
+		buff.HandleEachPipe()
+		return
 	} else {
 		buff = currentBuffer[0]
 		// command = buff.Next[0]
 	}
+
 	switch strings.ToLower(strings.TrimPrefix(command, "&")) {
 	case "ping":
 		Ping(buff)
-	case "substitute":
-		Substitute(buff)
+	case "substitute", "replace":
+		Substitute(buff, content)
 	case "shutdown":
 		if config.Config("ID", "Owner") == message.Author.ID {
 			Shutdown(buff)
@@ -164,14 +235,51 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 			buff.Content = "Sorry, I don't think you have enough permissions to use this."
 		}
 
-	case "pipe":
+		/*case "pipe":
 		buff.CreateWithPipes(content)
 		// Remove pipe itself
-		buff.HandleEachPipe()
-	case "push":
+		buff.HandleEachPipe()*/
+	case "echo":
 		buff.Content = RemoveCommand(content)
+	case "upper":
+		Capitalize(buff)
+	case "lower":
+		Lower(buff)
+	case "grep":
+	case "print":
+		Print(buff)
+	case "wc":
+		Count(buff)
+	case "debug":
+		Debug(buff)
+	case "bold":
+		buff.Content = fmt.Sprintf("**%s**", buff.Content)
+	case "italic":
+		buff.Content = fmt.Sprintf("*%s*", buff.Content)
+	case "alternate":
+
+	case "grab", "pick":
+		var grab string
+		if RemoveCommand(content) != "" {
+			msg, err := Client.ChannelMessage(Message.ChannelID, RemoveCommand(content))
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+			grab = msg.Content
+		} else {
+			previous, err := Client.ChannelMessages(Message.ChannelID, 1, Message.ID, "", "")
+			if err != nil {
+				return
+			}
+			grab = previous[0].Content
+		}
+		buff.Content = grab
 	case "cat":
-		Cat(buff)
+		Cat(buff, content)
+	case "flush":
+		buff.Content = ""
+
 	case "cron":
 		// Check maximum crons for the user, should be 1 by default
 		cronJobs, err := databases.SafeQuery(`select timestamp from jobs where user=?`, message.Author.ID)
@@ -195,6 +303,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Client.ChannelMessageSend(origin, "Adding...")
 		NewCron(content, buff)
 	default:
+		buff.Errors += 1
 		return
 	}
 }
