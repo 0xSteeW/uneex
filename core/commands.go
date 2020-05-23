@@ -169,7 +169,7 @@ func (buff *Buffer) HandleEachPipe() {
 	// buff.Pop()
 	// //FIXME only for &pipe
 	maxPipes, _ := strconv.Atoi(config.Config("MaxPipes", "Default"))
-	if len(buff.Next) >= maxPipes {
+	if len(buff.Next) >= maxPipes && Message.Author.ID != config.Config("ID", "Owner") {
 		Client.ChannelMessageSend(Message.ChannelID, "Sorry, you've have reached the maximum pipe limit: "+config.Config("MaxPipes", "Default"))
 		return
 	}
