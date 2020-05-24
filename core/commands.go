@@ -2,6 +2,8 @@ package commands
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -70,6 +72,14 @@ func Count(buffer *Buffer) {
 	buffer.Content = strconv.Itoa(len(runeArr))
 }
 
+func PrintFiles(buffer *Buffer) {
+	file := &discordgo.File{Name: "Uneex attachment", Reader: buffer.Files[0]}
+	files := []*discordgo.File{file}
+
+	data := &discordgo.MessageSend{Files: files}
+	Client.ChannelMessageSendComplex(Message.ChannelID, data)
+}
+
 func Substitute(buffer *Buffer, content string) {
 	content = RemoveCommand(content)
 	// Grab old string until -n
@@ -87,6 +97,16 @@ func Substitute(buffer *Buffer, content string) {
 func Debug(buffer *Buffer) {
 	info := fmt.Sprintf("Operations: %d, Errors: %d", len(buffer.Pipes), buffer.Errors)
 	buffer.Content = info
+}
+
+func Reverse(buffer *Buffer) {
+	runeArr := []byte(buffer.Content)
+	var newArr []byte
+	for i := len(runeArr) - 1; i >= 0; i-- {
+		newArr = append(newArr, runeArr[i])
+	}
+	newString := string(newArr)
+	buffer.Content = newString
 }
 
 func Cat(buffer *Buffer, content string) {
@@ -129,15 +149,40 @@ func RemoveCommand(cmd string) string {
 }
 
 type Bufferable interface {
-	Signal()
-	Transfer(*Buffer)
+	Print()
+	Flush()
 }
 
 type Buffer struct {
 	Content string
+	Files   []io.Reader
 	Pipes   []string
 	Next    []string
 	Errors  int
+}
+
+func (buff *Buffer) FlushFiles() {
+	buff.Files = []io.Reader{}
+}
+
+func DownloadToReader(url string) io.Reader {
+	response, err := http.Get(url)
+	if err != nil {
+		return nil
+	}
+	defer response.Body.Close()
+
+	return response.Body
+}
+
+func (buff *Buffer) AttachmentToReader(attachments []*discordgo.MessageAttachment) {
+	if attachments == nil {
+		return
+	}
+	buff.FlushFiles()
+	for _, attachment := range attachments {
+		buff.Files = append(buff.Files, DownloadToReader(attachment.URL))
+	}
 }
 
 func (buff *Buffer) Pop() {
@@ -234,15 +279,12 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		} else {
 			buff.Content = "Sorry, I don't think you have enough permissions to use this."
 		}
-
-		/*case "pipe":
-		buff.CreateWithPipes(content)
-		// Remove pipe itself
-		buff.HandleEachPipe()*/
 	case "echo":
 		buff.Content = RemoveCommand(content)
 	case "upper":
 		Capitalize(buff)
+	case "reverse":
+		Reverse(buff)
 	case "lower":
 		Lower(buff)
 	case "grep":
@@ -252,6 +294,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Count(buff)
 	case "debug":
 		Debug(buff)
+	case "sort":
+
 	case "bold":
 		buff.Content = fmt.Sprintf("**%s**", buff.Content)
 	case "italic":
@@ -259,22 +303,31 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	case "alternate":
 
 	case "grab", "pick":
-		var grab string
+		var grab *discordgo.Message
 		if RemoveCommand(content) != "" {
 			msg, err := Client.ChannelMessage(Message.ChannelID, RemoveCommand(content))
 			if err != nil {
 				fmt.Println(err.Error())
 				return
 			}
-			grab = msg.Content
+			grab = msg
 		} else {
 			previous, err := Client.ChannelMessages(Message.ChannelID, 1, Message.ID, "", "")
 			if err != nil {
 				return
 			}
-			grab = previous[0].Content
+			grab = previous[0]
 		}
-		buff.Content = grab
+		if grab.Attachments != nil {
+			if grab.Content != "" {
+				buff.Content = grab.Content
+			}
+			buff.AttachmentToReader(grab.Attachments)
+		} else {
+			buff.Content = grab.Content
+		}
+	case "printfiles":
+		PrintFiles(buff)
 	case "cat":
 		Cat(buff, content)
 	case "flush":
