@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -45,13 +46,8 @@ func Print(buffer *Buffer) {
 	if buffer.Content == "" {
 		return
 	}
-	var commands string
-	for _, cmd := range buffer.Pipes {
-		commands = commands + cmd + " "
-	}
-	fieldCommands := &discordgo.MessageEmbedField{Name: "Issued commands", Value: commands}
 	fieldResult := &discordgo.MessageEmbedField{Name: ">", Value: buffer.Content}
-	fields := []*discordgo.MessageEmbedField{fieldCommands, fieldResult}
+	fields := []*discordgo.MessageEmbedField{fieldResult}
 	embed := &discordgo.MessageEmbed{Title: "Result:", Fields: fields}
 	_, err := Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 	if err != nil {
@@ -73,8 +69,11 @@ func Count(buffer *Buffer) {
 }
 
 func PrintFiles(buffer *Buffer) {
-	file := &discordgo.File{Name: "Uneex attachment", Reader: buffer.Files[0]}
-	files := []*discordgo.File{file}
+	var files []*discordgo.File
+	for filename, reader := range buffer.Files {
+		file := &discordgo.File{Name: filename, Reader: reader}
+		files = append(files, file)
+	}
 
 	data := &discordgo.MessageSend{Files: files}
 	Client.ChannelMessageSendComplex(Message.ChannelID, data)
@@ -111,6 +110,28 @@ func Reverse(buffer *Buffer) {
 
 func Cat(buffer *Buffer, content string) {
 	buffer.Content = buffer.Content + OnlyRemoveCommand(content)
+}
+
+func Avatar(buffer *Buffer) {
+	var avatarFile io.Reader
+	var name string
+	if len(Mentions) == 0 {
+		avatarFile, _ = DownloadToReader(Message.Author.AvatarURL(""))
+		name = Message.Author.ID + ".gif"
+	} else {
+		avatarFile, _ = DownloadToReader(Mentions[0].AvatarURL(""))
+		name = Mentions[0].ID + ".gif"
+	}
+	buffer.AddFile(name, avatarFile)
+}
+
+func ServerIcon(buffer *Buffer) {
+	guild, err := Client.Guild(Message.GuildID)
+	if err != nil {
+		return
+	}
+	reader, _ := DownloadToReader(guild.IconURL())
+	buffer.AddFile(guild.ID+".gif", reader)
 }
 
 func NewCron(content string, buffer *Buffer) {
@@ -155,34 +176,43 @@ type Bufferable interface {
 
 type Buffer struct {
 	Content string
-	Files   []io.Reader
+	Files   map[string]io.Reader
 	Pipes   []string
 	Next    []string
 	Errors  int
 }
 
 func (buff *Buffer) FlushFiles() {
-	buff.Files = []io.Reader{}
+	buff.Files = nil
 }
 
-func DownloadToReader(url string) io.Reader {
+func DownloadToReader(url string) (io.Reader, string) {
 	response, err := http.Get(url)
 	if err != nil {
-		return nil
+		fmt.Println(err.Error())
+		return nil, ""
 	}
 	defer response.Body.Close()
-
-	return response.Body
+	raw, err := ioutil.ReadAll(response.Body)
+	ftype := http.DetectContentType(raw)
+	if err != nil {
+		return nil, ""
+	}
+	reader := strings.NewReader(string(raw))
+	return reader, ftype
 }
 
 func (buff *Buffer) AttachmentToReader(attachments []*discordgo.MessageAttachment) {
 	if attachments == nil {
 		return
 	}
-	buff.FlushFiles()
+	var files map[string]io.Reader
+	files = make(map[string]io.Reader)
 	for _, attachment := range attachments {
-		buff.Files = append(buff.Files, DownloadToReader(attachment.URL))
+		downloaded, _ := DownloadToReader(attachment.URL)
+		files[attachment.Filename] = downloaded
 	}
+	buff.Files = files
 }
 
 func (buff *Buffer) Pop() {
@@ -210,6 +240,12 @@ func (buff *Buffer) Print() {
 	}
 }
 
+func (buff *Buffer) AddFile(fname string, reader io.Reader) {
+	file := make(map[string]io.Reader)
+	file[fname] = reader
+	buff.Files = file
+}
+
 func (buff *Buffer) HandleEachPipe() {
 	// buff.Pop()
 	// //FIXME only for &pipe
@@ -231,6 +267,10 @@ func (buff *Buffer) HandleEachPipe() {
 		return
 	}
 	Print(buff)
+	if buff.Files != nil {
+		PrintFiles(buff)
+	}
+
 }
 
 func (buff *Buffer) Clean() {
@@ -268,6 +308,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	}
 
 	switch strings.ToLower(strings.TrimPrefix(command, "&")) {
+	case "help":
+		Help(buff)
 	case "ping":
 		Ping(buff)
 	case "substitute", "replace":
@@ -279,6 +321,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		} else {
 			buff.Content = "Sorry, I don't think you have enough permissions to use this."
 		}
+	case "avatar", "av":
+		Avatar(buff)
 	case "echo":
 		buff.Content = RemoveCommand(content)
 	case "upper":
@@ -292,6 +336,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Print(buff)
 	case "wc":
 		Count(buff)
+	case "servericon":
+		ServerIcon(buff)
 	case "debug":
 		Debug(buff)
 	case "sort":
@@ -332,6 +378,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Cat(buff, content)
 	case "flush":
 		buff.Content = ""
+		buff.Files = nil
 
 	case "cron":
 		// Check maximum crons for the user, should be 1 by default
@@ -359,4 +406,38 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		buff.Errors += 1
 		return
 	}
+}
+
+func Help(buffer *Buffer) {
+	var fields []*discordgo.MessageEmbedField
+	// Text editing commands
+	rowHelp := &discordgo.MessageEmbedField{Name: "help", Value: "Help shows a simple help command"}
+	rowPing := &discordgo.MessageEmbedField{Name: "ping", Value: "Show a simple RTT menu"}
+	rowReplace := &discordgo.MessageEmbedField{Name: "substitute, replace (old -n new)", Value: "Replace string from the buffer content with another of your choosing. To separate old string and new one please use the -n flag"}
+	rowShutdown := &discordgo.MessageEmbedField{Name: "shutdown", Value: "Don't you try it..."}
+	rowEcho := &discordgo.MessageEmbedField{Name: "echo", Value: "Push a string to the current buffer. It will replace any previous strings on it."}
+	rowPrint := &discordgo.MessageEmbedField{Name: "print", Value: "Force to print the content in the buffer before the command ends."}
+	rowLower := &discordgo.MessageEmbedField{Name: "lower", Value: "Lower the content in the buffer."}
+	rowWc := &discordgo.MessageEmbedField{Name: "wc", Value: "Count characters in the buffer content including spaces."}
+	rowDebug := &discordgo.MessageEmbedField{Name: "debug", Value: "Replace buffer with debug info."}
+	rowBold := &discordgo.MessageEmbedField{Name: "bold", Value: "Turn text in buffer to bold."}
+	rowItalic := &discordgo.MessageEmbedField{Name: "italic", Value: "Turn text in buffer to italic."}
+	rowGrab := &discordgo.MessageEmbedField{Name: "grab, pick (messageID)", Value: "Copy the string content of the provided message ID into buffer. If no ID is specified it will copy latest message."}
+	rowCat := &discordgo.MessageEmbedField{Name: "cat (string)", Value: "Concatenate current buffer with the provided string."}
+	rowFlush := &discordgo.MessageEmbedField{Name: "flush", Value: "Completely empty current buffer, including files."}
+	rowCron := &discordgo.MessageEmbedField{Name: "cron", Value: "Work in progress."}
+	rowSyntax := &discordgo.MessageEmbedField{Name: "Syntax", Value: "Syntax: &command1 | &command2"}
+	rowReverse := &discordgo.MessageEmbedField{Name: "reverse", Value: "Reverses current buffer string."}
+
+	// Image editing commands
+	//
+	rowAvatar := &discordgo.MessageEmbedField{Name: "avatar, av (mention)", Value: "Save your avatar image to the buffer. If you mention an user, it will be added instead."}
+	rowServerIcon := &discordgo.MessageEmbedField{Name: "servericon", Value: "Push the server icon to the buffer."}
+	rowPrintFiles := &discordgo.MessageEmbedField{Name: "printfiles", Value: "Force print current files in the buffer."}
+
+	// Append every help row
+	fields = []*discordgo.MessageEmbedField{rowSyntax, rowHelp, rowReverse, rowPing, rowReplace, rowShutdown, rowAvatar, rowEcho, rowPrint, rowLower, rowWc, rowServerIcon, rowDebug, rowBold, rowItalic, rowGrab, rowPrintFiles, rowCat, rowFlush, rowCron}
+
+	embed := &discordgo.MessageEmbed{Title: "Help menu", Description: "Current commands. The bot prints the current buffer by default when the command ends.", Fields: fields}
+	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 }
