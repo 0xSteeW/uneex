@@ -14,6 +14,7 @@ import (
 	databases "uneex/databases"
 
 	"github.com/bwmarrin/discordgo"
+	"gopkg.in/gographics/imagick.v3/imagick"
 )
 
 // Global core commands
@@ -35,6 +36,13 @@ func Ping(buffer *Buffer) {
 	embed := &discordgo.MessageEmbed{Title: "Pong!", Description: "Successful ping! Showing RTT:", Fields: fields}
 
 	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
+}
+
+// Time functions with time.Now()
+func Timer(start time.Time) string {
+
+	duration := time.Since(start)
+	return duration.String()
 }
 
 func Shutdown(buffer *Buffer) {
@@ -108,6 +116,79 @@ func Reverse(buffer *Buffer) {
 	buffer.Content = newString
 }
 
+func Invert(buffer *Buffer) {
+	wand, pw := OpenIM(buffer)
+	wand.NegateImage(false)
+	SaveBlob(buffer, wand, pw)
+}
+
+// Remember to destroy wand after using
+func OpenIM(buffer *Buffer) (*imagick.MagickWand, *imagick.PixelWand) {
+	var wand *imagick.MagickWand
+	var pw *imagick.PixelWand
+	for _, reader := range buffer.Files {
+		blob, err := ioutil.ReadAll(reader)
+		if err != nil {
+			return nil, nil
+		}
+		wand = imagick.NewMagickWand()
+		err = wand.ReadImageBlob(blob)
+		if err != nil {
+			return nil, nil
+		}
+		pw = imagick.NewPixelWand()
+
+	}
+	return wand, pw
+}
+
+func SaveBlob(buffer *Buffer, wand *imagick.MagickWand, pw *imagick.PixelWand) {
+	var name string
+	for n, _ := range buffer.Files {
+		name = n
+	}
+	var tmp map[string]io.Reader
+	tmp = make(map[string]io.Reader)
+	newFlipped := wand.GetImageBlob()
+	newReader := strings.NewReader(string(newFlipped))
+	defer wand.Destroy()
+	defer pw.Destroy()
+
+	tmp[name] = newReader
+	buffer.Files = tmp
+}
+
+func Rotate(buffer *Buffer, content string) {
+	// timer := time.Now()
+	wand, pw := OpenIM(buffer)
+	// ----------------------------------------------------------------------------
+	angleRaw := RemoveCommand(content)
+	var angle float64
+	switch strings.ToLower(angleRaw) {
+	case "right":
+		angle = 90
+	case "left":
+		angle = -90
+	case "up":
+		angle = 180
+	case "down":
+		angle = -180
+	default:
+		buffer.Content = "Provided direction is not valid."
+		return
+	}
+	err := wand.RotateImage(pw, angle)
+	if err != nil {
+		buffer.Content = "Could not rotate image"
+		buffer.FlushFiles()
+		return
+	}
+	// ----------------------------------------------------------------------------
+	SaveBlob(buffer, wand, pw)
+
+	// defer Client.ChannelMessageSend(Message.ChannelID, Timer(timer))
+}
+
 func Cat(buffer *Buffer, content string) {
 	buffer.Content = buffer.Content + OnlyRemoveCommand(content)
 }
@@ -115,12 +196,15 @@ func Cat(buffer *Buffer, content string) {
 func Avatar(buffer *Buffer) {
 	var avatarFile io.Reader
 	var name string
+	var extension string
 	if len(Mentions) == 0 {
-		avatarFile, _ = DownloadToReader(Message.Author.AvatarURL(""))
-		name = Message.Author.ID + ".gif"
+		avatarFile = DownloadToReader(Message.Author.AvatarURL(""))
+		_, extension = GetFileType(avatarFile)
+		name = Message.Author.ID + extension
 	} else {
-		avatarFile, _ = DownloadToReader(Mentions[0].AvatarURL(""))
-		name = Mentions[0].ID + ".gif"
+		avatarFile = DownloadToReader(Mentions[0].AvatarURL(""))
+		_, extension := GetFileType(avatarFile)
+		name = Mentions[0].ID + extension
 	}
 	buffer.AddFile(name, avatarFile)
 }
@@ -130,8 +214,9 @@ func ServerIcon(buffer *Buffer) {
 	if err != nil {
 		return
 	}
-	reader, _ := DownloadToReader(guild.IconURL())
-	buffer.AddFile(guild.ID+".gif", reader)
+	reader := DownloadToReader(guild.IconURL())
+	_, extension := GetFileType(reader)
+	buffer.AddFile(guild.ID+extension, reader)
 }
 
 func NewCron(content string, buffer *Buffer) {
@@ -186,20 +271,30 @@ func (buff *Buffer) FlushFiles() {
 	buff.Files = nil
 }
 
-func DownloadToReader(url string) (io.Reader, string) {
+func GetFileType(reader io.Reader) (rawtype string, extension string) {
+	by, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return
+	}
+	ftype := http.DetectContentType(by)
+	rawtype = fmt.Sprintf("%s", strings.Split(ftype, "/")[0])
+	extension = fmt.Sprintf(".%s", strings.Split(ftype, "/")[1])
+	return rawtype, extension
+}
+
+func DownloadToReader(url string) io.Reader {
 	response, err := http.Get(url)
 	if err != nil {
 		fmt.Println(err.Error())
-		return nil, ""
+		return nil
 	}
 	defer response.Body.Close()
 	raw, err := ioutil.ReadAll(response.Body)
-	ftype := http.DetectContentType(raw)
 	if err != nil {
-		return nil, ""
+		return nil
 	}
 	reader := strings.NewReader(string(raw))
-	return reader, ftype
+	return reader
 }
 
 func (buff *Buffer) AttachmentToReader(attachments []*discordgo.MessageAttachment) {
@@ -209,7 +304,7 @@ func (buff *Buffer) AttachmentToReader(attachments []*discordgo.MessageAttachmen
 	var files map[string]io.Reader
 	files = make(map[string]io.Reader)
 	for _, attachment := range attachments {
-		downloaded, _ := DownloadToReader(attachment.URL)
+		downloaded := DownloadToReader(attachment.URL)
 		files[attachment.Filename] = downloaded
 	}
 	buff.Files = files
@@ -374,6 +469,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		}
 	case "printfiles":
 		PrintFiles(buff)
+	case "invert":
+		Invert(buff)
+	case "rotate":
+		Rotate(buff, content)
 	case "cat":
 		Cat(buff, content)
 	case "flush":

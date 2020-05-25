@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	config "uneex/config"
@@ -14,6 +15,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-ini/ini"
 	_ "github.com/go-sql-driver/mysql"
+	"gopkg.in/gographics/imagick.v3/imagick"
 )
 
 // Globals
@@ -24,10 +26,12 @@ func init() {
 	// Perform initial operations, opening databases and checking config files
 	// Greet in console when ready
 	fmt.Println("Starting Uneex bot")
+	imagick.Initialize()
 }
 
 func main() {
 	// Open config ini file by marshaling with ini.Load()
+	defer imagick.Terminate()
 	var err error
 	config.Conf, _ = ini.Load("config/config.ini")
 	fmt.Println(config.Config("Version"))
@@ -52,6 +56,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	guilds := client.State.Guilds
+	game := &discordgo.Game{Name: strconv.Itoa(len(guilds)) + " Guilds!"}
+	status := &discordgo.UpdateStatusData{Game: game}
+	client.UpdateStatusComplex(*status)
 	fmt.Println("Client started")
 	// Handle syscalls to quit bot gracefully and close database connection
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
