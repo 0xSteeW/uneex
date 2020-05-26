@@ -158,6 +158,29 @@ func Count(buffer *Buffer) {
 	buffer.Content = strconv.Itoa(len(runeArr))
 }
 
+func Unemoji(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	emojiLink := "https://cdn.discordapp.com/emojis/"
+	if strings.HasPrefix(content, "<:") && strings.HasSuffix(content, ">") {
+		code := strings.Split(content, ":")
+		if len(code) < 3 {
+			buffer.Content = "Emoji not valid"
+			buffer.FlushFiles()
+			return
+		}
+		codeRaw := strings.TrimSuffix(code[2], ">")
+		dwurl := emojiLink + codeRaw + ".png"
+		emoji := DownloadToBytes(dwurl)
+		ftype, ext := GetFileType(emoji)
+		if ftype != "image" {
+			buffer.Content = "Emoji couldn't be de-emoji'd"
+			buffer.FlushFiles()
+			return
+		}
+		buffer.AddFile(codeRaw+ext, emoji)
+	}
+}
+
 func PrintFiles(buffer *Buffer) {
 	var files []*discordgo.File
 	for filename, blob := range buffer.Files {
@@ -595,6 +618,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Rotate(buff, content)
 	case "cat":
 		Cat(buff, content)
+	case "unemoji":
+		Unemoji(buff, content)
 	case "flush":
 		buff.Content = ""
 		buff.Files = nil
