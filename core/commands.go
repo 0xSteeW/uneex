@@ -32,7 +32,7 @@ func Ping(buffer *Buffer) {
 	fieldPingNanoseconds := &discordgo.MessageEmbedField{Name: "Nanoseconds", Value: strconv.FormatInt(latency.Nanoseconds(), 10)}
 	fieldPingMicroseconds := &discordgo.MessageEmbedField{Name: "Microseconds", Value: strconv.FormatInt(latency.Microseconds(), 10)}
 	fields = []*discordgo.MessageEmbedField{fieldPingNormal, fieldPingNanoseconds, fieldPingMicroseconds}
-	embed := &discordgo.MessageEmbed{Title: "Pong!", Description: "Successful ping! Showing RTT:", Fields: fields}
+	embed := &discordgo.MessageEmbed{Title: "Pong!", Description: "Successful ping! Showing RTT:", Fields: fields, Color: 0x00ff00}
 
 	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 }
@@ -42,6 +42,21 @@ func Timer(start time.Time) string {
 
 	duration := time.Since(start)
 	return duration.String()
+}
+
+func ConcatRoleSlice(slice []string, guild *discordgo.Guild) string {
+	var roleMap map[string]string
+	var cat string
+	roleMap = make(map[string]string)
+	for _, role := range guild.Roles {
+		roleMap[role.ID] = role.Name
+	}
+	for _, element := range slice {
+		if role, ok := roleMap[element]; ok {
+			cat = cat + "" + role + " "
+		}
+	}
+	return cat
 }
 
 func Shutdown(buffer *Buffer) {
@@ -59,6 +74,74 @@ func Print(buffer *Buffer) {
 	_, err := Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 	if err != nil {
 		Client.ChannelMessageSend(Message.ChannelID, err.Error())
+	}
+}
+
+// TODO
+func Info(buffer *Buffer) {
+	// Parse user
+	//
+	var user *discordgo.User
+	var joinedTime time.Time
+
+	if len(Mentions) == 0 {
+		user = Message.Author
+	} else {
+		user = Mentions[0]
+	}
+	userField := &discordgo.MessageEmbedField{Name: "User", Value: user.String(), Inline: true}
+	guild, err := Client.Guild(Message.GuildID)
+	if err != nil {
+		return
+	}
+	var joinedAt *discordgo.Timestamp
+	var rolesRaw []string
+	for _, member := range guild.Members {
+		if member.User.ID == user.ID {
+			joinedAt = &member.JoinedAt
+			rolesRaw = member.Roles
+			break
+		}
+	}
+	if joinedAt == nil {
+		return
+	}
+	joinedTime, err = joinedAt.Parse()
+	if err != nil {
+		return
+	}
+	joinDate := &discordgo.MessageEmbedField{Name: "Server Join Date", Value: joinedTime.String(), Inline: true}
+	cat := ConcatRoleSlice(rolesRaw, guild)
+	guildRoles := &discordgo.MessageEmbedField{Name: "User Roles", Value: cat, Inline: false}
+	userID := &discordgo.MessageEmbedField{Name: "User ID", Value: user.ID, Inline: false}
+
+	fields := []*discordgo.MessageEmbedField{userField, joinDate, guildRoles, userID}
+	embed := &discordgo.MessageEmbed{Title: "User information", Fields: fields}
+	_, err = Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
+	if err != nil {
+		buffer.Content = "Couldn't send info"
+		fmt.Println(err.Error())
+	}
+}
+
+// TODO
+func ServerInfo(buffer *Buffer) {
+	var guild *discordgo.Guild
+	var err error
+	guild, err = Client.Guild(Message.GuildID)
+	if err != nil {
+		return
+	}
+	guildName := &discordgo.MessageEmbedField{Name: "Server Name", Value: guild.Name, Inline: true}
+	guildMembers := &discordgo.MessageEmbedField{Name: "Members", Value: strconv.Itoa(guild.MemberCount), Inline: true}
+	guildIcon := &discordgo.MessageEmbedThumbnail{URL: guild.IconURL()}
+
+	fields := []*discordgo.MessageEmbedField{guildName, guildMembers}
+	embed := &discordgo.MessageEmbed{Title: "Server information", Fields: fields, Thumbnail: guildIcon}
+	_, err = Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
+	if err != nil {
+		buffer.Content = "Couldn't send info"
+		fmt.Println(err.Error())
 	}
 }
 
@@ -114,6 +197,32 @@ func Reverse(buffer *Buffer) {
 	}
 	newString := string(newArr)
 	buffer.Content = newString
+}
+
+func Blur(buffer *Buffer, content string) {
+	wand, pw := OpenIM(buffer)
+	MAX_SIGMA := 50
+	if wand == nil || pw == nil {
+		return
+	}
+	sigma, err := strconv.Atoi(RemoveCommand(content))
+	if sigma > MAX_SIGMA {
+		buffer.Content = "Sigma is too high. (MAXVAL: )" + strconv.Itoa(MAX_SIGMA)
+		buffer.FlushFiles()
+		return
+	}
+	if err != nil {
+		buffer.Content = "Provided sigma wasn't a number or it was not valid"
+		buffer.FlushFiles()
+		return
+	}
+	err = wand.BlurImage(0, float64(sigma))
+	if err != nil {
+		buffer.Content = "Could not blur image."
+		buffer.FlushFiles()
+		return
+	}
+	SaveBlob(buffer, wand, pw)
 }
 
 func Invert(buffer *Buffer) {
@@ -474,6 +583,12 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		}
 	case "printfiles":
 		PrintFiles(buff)
+	case "info":
+		Info(buff)
+	case "serverinfo":
+		ServerInfo(buff)
+	case "blur":
+		Blur(buff, content)
 	case "invert":
 		Invert(buff)
 	case "rotate":
