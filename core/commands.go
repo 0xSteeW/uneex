@@ -196,33 +196,80 @@ func Kick(buffer *Buffer, content string) {
 	}
 }
 
+// Ban
 func Ban(buffer *Buffer, content string) {
 	if moderation.HasPermission("ban", GetPermissionsInt()) {
+		params := strings.Split(RemoveCommand(content), "-r")
+		var reason string
+		var paramsLeft string
+		if len(params) < 2 {
+			buffer.Content = "No reason was provided, proceeding."
+			paramsLeft = RemoveCommand(content)
+		} else {
+			reason = params[1]
+			paramsLeft = params[0]
+		}
+		days := strings.Split(content, "-d")
+		if len(days) == 0 {
+			buffer.Content = "No amount of days were provided"
+			return
+		}
+		daysInt, err := strconv.Atoi(strings.TrimSpace(days[1]))
+		if err != nil {
+			buffer.Content = "Number of days were not valid."
+			return
+		}
 		if len(Mentions) >= 1 {
 			var err error
 			for _, userToKick := range Mentions {
-				if RemoveCommand(content) != "" {
-					days, _ := StripMentions(content)
-					daysInt, err := strconv.Atoi(days[0])
-					if err != nil {
-						buffer.Content = "Provided days are not valid."
-						return
-					}
-					err = Client.GuildBanCreate(Message.GuildID, userToKick.ID, daysInt)
+				if reason != "" {
+					err = Client.GuildBanCreateWithReason(Message.GuildID, userToKick.ID, reason, daysInt)
 				} else {
-					buffer.Content = "Ban days were not provided"
+					err = Client.GuildBanCreate(Message.GuildID, userToKick.ID, daysInt)
 				}
 			}
 			if err != nil {
 				buffer.Content = "One or more users could not be banned."
+			} else {
+				buffer.Content = "Successfully banned all users."
+			}
+		} else {
+			// Slice again to find ids
+			ids := strings.Split(paramsLeft, " ")
+			if len(ids) == 0 {
+				buffer.Content = "No mentions or ID have been provided"
 				return
 			}
-			buffer.Content = "Successfully banned users."
-		} else {
-			buffer.Content = "You didn't provide any users to ban."
+			validID := regexp.MustCompile(`[0-9]{18}`)
+			var validIDS []string
+			for _, ID := range ids {
+				ID = strings.TrimSpace(ID)
+				if validID.Match([]byte(ID)) {
+					validIDS = append(validIDS, ID)
+				}
+			}
+			// Found valid ids, now lets get users
+			users := GetUsersFromID(validIDS)
+			if users == nil {
+				buffer.Content = "Provided IDs were not valid."
+				return
+			}
+			var err error
+			for _, user := range users {
+				if reason != "" {
+					err = Client.GuildBanCreateWithReason(Message.GuildID, user.ID, reason, daysInt)
+				} else {
+					err = Client.GuildBanCreate(Message.GuildID, user.ID, daysInt)
+				}
+			}
+			if err != nil {
+				buffer.Content = "One or more users could not be banned."
+			} else {
+				buffer.Content = "Successfully banned all users."
+			}
 		}
 	} else {
-		buffer.Content = "You don't have enough permissions to do that."
+		buffer.Content = "Sorry, you don't have permission for this."
 	}
 }
 
@@ -774,7 +821,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	case "kick":
 		Kick(buff, content)
 	case "ban":
-		// Ban(buff, content)
+		Ban(buff, content)
 	case "printfiles":
 		PrintFiles(buff)
 	case "info":
