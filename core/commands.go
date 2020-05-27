@@ -88,22 +88,23 @@ func GetPermissionsInt() int {
 	return perms
 }
 
-func StripMentions(content string) []string {
+func StripMentions(content string) (params []string, mentionSlice []string) {
 	content = RemoveCommand(content)
 	listOfParams := strings.Split(content, " ")
-	mention := regexp.MustCompile(`<@[0-9]{18}>`)
+	mention := regexp.MustCompile(`@.*`)
 	if len(listOfParams) == 0 {
-		return nil
+		return nil, nil
 	}
 	var newParams []string
+	var mentions []string
 	for _, param := range listOfParams {
 		if mention.Match([]byte(param)) {
-			continue
+			mentions = append(mentions, param)
 		} else {
 			newParams = append(newParams, param)
 		}
 	}
-	return newParams
+	return newParams, mentions
 }
 
 func FormatSliceToString(slice []string) string {
@@ -117,13 +118,34 @@ func FormatSliceToString(slice []string) string {
 	return strings.TrimSpace(final)
 }
 
+func GetUsersFromID(userIDS []string) []*discordgo.User {
+	var final []*discordgo.User
+	for _, userID := range userIDS {
+		user, err := Client.User(userID)
+		if err != nil {
+			continue
+		}
+		final = append(final, user)
+	}
+	return final
+}
+
 func Kick(buffer *Buffer, content string) {
 	if moderation.HasPermission("kick", GetPermissionsInt()) {
+		params := strings.Split(RemoveCommand(content), "-r")
+		var reason string
+		var paramsLeft string
+		if len(params) < 2 {
+			buffer.Content = "No reason was provided, proceeding."
+			paramsLeft = RemoveCommand(content)
+		} else {
+			reason = params[1]
+			paramsLeft = params[0]
+		}
 		if len(Mentions) >= 1 {
 			var err error
 			for _, userToKick := range Mentions {
-				if RemoveCommand(content) != "" {
-					reason := FormatSliceToString(StripMentions(content))
+				if reason != "" {
 					err = Client.GuildMemberDeleteWithReason(Message.GuildID, userToKick.ID, reason)
 				} else {
 					err = Client.GuildMemberDelete(Message.GuildID, userToKick.ID)
@@ -131,14 +153,46 @@ func Kick(buffer *Buffer, content string) {
 			}
 			if err != nil {
 				buffer.Content = "One or more users could not be kicked."
+			} else {
+				buffer.Content = "Successfully kicked all users."
+			}
+		} else {
+			// Slice again to find ids
+			ids := strings.Split(paramsLeft, " ")
+			if len(ids) == 0 {
+				buffer.Content = "No mentions or ID have been provided"
 				return
 			}
-			buffer.Content = "Successfully kicked users."
-		} else {
-			buffer.Content = "You didn't provide any users to kick."
+			validID := regexp.MustCompile(`[0-9]{18}`)
+			var validIDS []string
+			for _, ID := range ids {
+				ID = strings.TrimSpace(ID)
+				if validID.Match([]byte(ID)) {
+					validIDS = append(validIDS, ID)
+				}
+			}
+			// Found valid ids, now lets get users
+			users := GetUsersFromID(validIDS)
+			if users == nil {
+				buffer.Content = "Provided IDs were not valid."
+				return
+			}
+			var err error
+			for _, user := range users {
+				if reason != "" {
+					err = Client.GuildMemberDeleteWithReason(Message.GuildID, user.ID, reason)
+				} else {
+					err = Client.GuildMemberDelete(Message.GuildID, user.ID)
+				}
+			}
+			if err != nil {
+				buffer.Content = "One or more users could not be kicked."
+			} else {
+				buffer.Content = "Successfully kicked all users."
+			}
 		}
 	} else {
-		buffer.Content = "You don't have enough permissions to do that."
+		buffer.Content = "Sorry, you don't have permission for this."
 	}
 }
 
@@ -148,9 +202,8 @@ func Ban(buffer *Buffer, content string) {
 			var err error
 			for _, userToKick := range Mentions {
 				if RemoveCommand(content) != "" {
-					days := FormatSliceToString(StripMentions(content))
-					fmt.Println(days)
-					daysInt, err := strconv.Atoi(days)
+					days, _ := StripMentions(content)
+					daysInt, err := strconv.Atoi(days[0])
 					if err != nil {
 						buffer.Content = "Provided days are not valid."
 						return
@@ -704,7 +757,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	case "kick":
 		Kick(buff, content)
 	case "ban":
-		Ban(buff, content)
+		// Ban(buff, content)
 	case "printfiles":
 		PrintFiles(buff)
 	case "info":
