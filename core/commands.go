@@ -5,12 +5,14 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 	config "uneex/config"
 	databases "uneex/databases"
+	"uneex/moderation"
 
 	"github.com/bwmarrin/discordgo"
 	"gopkg.in/gographics/imagick.v3/imagick"
@@ -74,6 +76,100 @@ func Print(buffer *Buffer) {
 	_, err := Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 	if err != nil {
 		Client.ChannelMessageSend(Message.ChannelID, err.Error())
+	}
+}
+
+// Moderation
+func GetPermissionsInt() int {
+	perms, err := Client.UserChannelPermissions(Message.Author.ID, Message.ChannelID)
+	if err != nil {
+		return 0
+	}
+	return perms
+}
+
+func StripMentions(content string) []string {
+	content = RemoveCommand(content)
+	listOfParams := strings.Split(content, " ")
+	mention := regexp.MustCompile(`<@[0-9]{18}>`)
+	if len(listOfParams) == 0 {
+		return nil
+	}
+	var newParams []string
+	for _, param := range listOfParams {
+		if mention.Match([]byte(param)) {
+			continue
+		} else {
+			newParams = append(newParams, param)
+		}
+	}
+	return newParams
+}
+
+func FormatSliceToString(slice []string) string {
+	if slice == nil {
+		return ""
+	}
+	var final string
+	for _, el := range slice {
+		final = final + el
+	}
+	return strings.TrimSpace(final)
+}
+
+func Kick(buffer *Buffer, content string) {
+	if moderation.HasPermission("kick", GetPermissionsInt()) {
+		if len(Mentions) >= 1 {
+			var err error
+			for _, userToKick := range Mentions {
+				if RemoveCommand(content) != "" {
+					reason := FormatSliceToString(StripMentions(content))
+					err = Client.GuildMemberDeleteWithReason(Message.GuildID, userToKick.ID, reason)
+				} else {
+					err = Client.GuildMemberDelete(Message.GuildID, userToKick.ID)
+				}
+			}
+			if err != nil {
+				buffer.Content = "One or more users could not be kicked."
+				return
+			}
+			buffer.Content = "Successfully kicked users."
+		} else {
+			buffer.Content = "You didn't provide any users to kick."
+		}
+	} else {
+		buffer.Content = "You don't have enough permissions to do that."
+	}
+}
+
+func Ban(buffer *Buffer, content string) {
+	if moderation.HasPermission("ban", GetPermissionsInt()) {
+		if len(Mentions) >= 1 {
+			var err error
+			for _, userToKick := range Mentions {
+				if RemoveCommand(content) != "" {
+					days := FormatSliceToString(StripMentions(content))
+					fmt.Println(days)
+					daysInt, err := strconv.Atoi(days)
+					if err != nil {
+						buffer.Content = "Provided days are not valid."
+						return
+					}
+					err = Client.GuildBanCreate(Message.GuildID, userToKick.ID, daysInt)
+				} else {
+					buffer.Content = "Ban days were not provided"
+				}
+			}
+			if err != nil {
+				buffer.Content = "One or more users could not be banned."
+				return
+			}
+			buffer.Content = "Successfully banned users."
+		} else {
+			buffer.Content = "You didn't provide any users to ban."
+		}
+	} else {
+		buffer.Content = "You don't have enough permissions to do that."
 	}
 }
 
@@ -159,9 +255,10 @@ func Count(buffer *Buffer) {
 }
 
 func Unemoji(buffer *Buffer, content string) {
+	isEmoji := regexp.MustCompile(`<\:.*:[0-9]{18}>`)
 	content = RemoveCommand(content)
 	emojiLink := "https://cdn.discordapp.com/emojis/"
-	if strings.HasPrefix(content, "<:") && strings.HasSuffix(content, ">") {
+	if isEmoji.Match([]byte(content)) {
 		code := strings.Split(content, ":")
 		if len(code) < 3 {
 			buffer.Content = "Emoji not valid"
@@ -604,6 +701,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		} else {
 			buff.Content = grab.Content
 		}
+	case "kick":
+		Kick(buff, content)
+	case "ban":
+		Ban(buff, content)
 	case "printfiles":
 		PrintFiles(buff)
 	case "info":

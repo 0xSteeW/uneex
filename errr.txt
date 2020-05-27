@@ -1,3 +1,0 @@
-Starting Uneex bot
-0.0.1
-Client started
