@@ -308,11 +308,28 @@ func Count(buffer *Buffer) {
 }
 
 func Unemoji(buffer *Buffer, content string) {
-	isEmoji := regexp.MustCompile(`<\:.*:[0-9]{18}>`)
-	content = RemoveCommand(content)
+	isEmoji := regexp.MustCompile(`\ ?<\:.*:[0-9]{18}>\ ?`)
+	var searchFor string
+	if RemoveCommand(content) != "" {
+		searchFor = RemoveCommand(content)
+	} else {
+		if buffer.Content != "" {
+			searchFor = strings.TrimSpace(buffer.Content)
+		}
+		// Find emojis here to work with them
+		items := strings.Split(searchFor, " ")
+		if len(items) != 0 {
+			for _, item := range items {
+				if isEmoji.Match([]byte(item)) {
+					searchFor = item
+					break
+				}
+			}
+		}
+	}
 	emojiLink := "https://cdn.discordapp.com/emojis/"
-	if isEmoji.Match([]byte(content)) {
-		code := strings.Split(content, ":")
+	if isEmoji.Match([]byte(searchFor)) {
+		code := strings.Split(searchFor, ":")
 		if len(code) < 3 {
 			buffer.Content = "Emoji not valid"
 			buffer.FlushFiles()
