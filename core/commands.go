@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -449,6 +450,38 @@ func Lower(buffer *Buffer) {
 func Count(buffer *Buffer) {
 	runeArr := []rune(buffer.Content)
 	buffer.Content = strconv.Itoa(len(runeArr))
+
+}
+
+func AddEmoji(buffer *Buffer, content string) {
+	if !moderation.HasPermission("manageEmojis", GetPermissionsInt()) {
+		buffer.Content = "You don't have enough permissions for this."
+		buffer.FlushFiles()
+		return
+	}
+	if RemoveCommand(content) == "" {
+		buffer.Content = "Emoji name not provided."
+		return
+	}
+	for _, img := range buffer.Files {
+		ftype, _ := GetFileType(img)
+		if ftype == "image" {
+			fullTypeToEncode := http.DetectContentType(img)
+			base64image := base64.StdEncoding.EncodeToString(img)
+			dataURI := fmt.Sprintf(`data:%s;base64,%s`, fullTypeToEncode, base64image)
+			_, err := Client.GuildEmojiCreate(Message.GuildID, RemoveCommand(content), dataURI, nil)
+			if err != nil {
+				buffer.Content = "Couldn't add emoji. " + err.Error()
+				fmt.Println(err.Error())
+				return
+			}
+			buffer.Content = "Successfully added emoji."
+			return
+		} else {
+			buffer.Content = "Provided files weren't images."
+		}
+	}
+	buffer.Content = "No files provided."
 }
 
 func Unemoji(buffer *Buffer, content string) {
@@ -891,7 +924,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		buff.Content = fmt.Sprintf("*%s*", buff.Content)
 	case "alternate":
 
-	case "grab", "pick":
+	case "grab", "pick", "copy":
 		var grab *discordgo.Message
 		if RemoveCommand(content) != "" {
 			msg, err := Client.ChannelMessage(Message.ChannelID, RemoveCommand(content))
@@ -937,6 +970,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Cat(buff, content)
 	case "unemoji":
 		Unemoji(buff, content)
+	case "addemoji":
+		AddEmoji(buff, content)
 	case "flush":
 		buff.Content = ""
 		buff.Files = nil
