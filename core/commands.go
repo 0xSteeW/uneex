@@ -289,12 +289,13 @@ func FindSpam(messages []*discordgo.Message) []*discordgo.Message {
 
 func BulkDelete(buffer *Buffer, messages []*discordgo.Message) {
 	var total int
-	// Client.ChannelTyping(Message.ChannelID)
+	var err error
+	Client.ChannelTyping(Message.ChannelID)
 	toRemove := FindSpam(messages)
 	for _, message := range toRemove {
-		err := Client.ChannelMessageDelete(Message.ChannelID, message.ID)
+		err = Client.ChannelMessageDelete(Message.ChannelID, message.ID)
 		if err != nil {
-			total += 1
+			total = total + 1
 		}
 	}
 	buffer.Content = "Total correctly removed messages: " + strconv.Itoa(total) + ", found messages: " + strconv.Itoa(len(toRemove))
