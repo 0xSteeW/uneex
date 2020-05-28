@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -196,6 +197,99 @@ func Kick(buffer *Buffer, content string) {
 	}
 }
 
+func CleanSpam(buffer *Buffer, content string) {
+	const MAX = 1000
+	numberOfMessages, err := strconv.Atoi(RemoveCommand(content))
+	if err != nil {
+		buffer.Content = "Number of provided messages is invalid."
+		return
+	}
+	if numberOfMessages > MAX {
+		buffer.Content = "You have exceeded the maximum number of messages (1000)"
+		return
+	}
+	// Get messages up to numberOfMessages
+	var left int
+	var rounds int
+	if numberOfMessages < 100 {
+		left = numberOfMessages
+	} else {
+		rounds = int(math.Trunc(float64(numberOfMessages / 100)))
+		left = numberOfMessages - rounds
+	}
+
+	var lastMessageID string
+	var messageList []*discordgo.Message
+	i := 0
+	for i < rounds {
+		messages, err := Client.ChannelMessages(Message.ChannelID, 100, lastMessageID, "", "")
+		if err != nil {
+			buffer.Content = "Could not retrieve messages"
+			return
+		}
+		messageList = append(messageList, messages...)
+		if len(messages) > 0 {
+			lastMessageID = messages[len(messages)-1].ID
+		}
+		i++
+	}
+	// Append remaining messages
+	messages, err := Client.ChannelMessages(Message.ChannelID, left, lastMessageID, "", "")
+	messageList = append(messageList, messages...)
+
+	BulkDelete(buffer, messageList)
+}
+
+func CleanEmpty(messages []*discordgo.Message) []*discordgo.Message {
+	var final []*discordgo.Message
+	for _, msg := range messages {
+		if msg.Content != "" {
+			final = append(final, msg)
+		}
+	}
+	return final
+}
+
+func IsSpam(content string) bool {
+	// Short Characters finder
+	// TODO change this to a database
+	const spamRatio = 0.5
+	content = strings.TrimSpace(content)
+	shortCount := 0
+	wordList := strings.Split(content, " ")
+	// Regex for multi word messages
+	if wordList != nil {
+		for _, word := range wordList {
+			if len(word) < 3 {
+				shortCount += 1
+			}
+		}
+		if float64(shortCount/len(wordList)) > spamRatio {
+			return true
+		}
+	}
+	return false
+}
+
+func FindSpam(messages []*discordgo.Message) []*discordgo.Message {
+	messages = CleanEmpty(messages)
+	var final []*discordgo.Message
+	for _, message := range messages {
+		if IsSpam(message.Content) {
+			final = append(final, message)
+		}
+	}
+	return final
+}
+
+func BulkDelete(buffer *Buffer, messages []*discordgo.Message) {
+	var total string
+	for _, message := range FindSpam(messages) {
+		total = total + " " + message.Content + "\n"
+	}
+	buffer.Content = total
+}
+
 // Ban
 func Ban(buffer *Buffer, content string) {
 	if moderation.HasPermission("ban", GetPermissionsInt()) {
@@ -308,6 +402,9 @@ func Info(buffer *Buffer) {
 	}
 	joinDate := &discordgo.MessageEmbedField{Name: "Server Join Date", Value: joinedTime.String(), Inline: true}
 	cat := ConcatRoleSlice(rolesRaw, guild)
+	if cat == "" {
+		cat = "None"
+	}
 	guildRoles := &discordgo.MessageEmbedField{Name: "User Roles", Value: cat, Inline: false}
 	userID := &discordgo.MessageEmbedField{Name: "User ID", Value: user.ID, Inline: false}
 
@@ -826,6 +923,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		PrintFiles(buff)
 	case "info":
 		Info(buff)
+	case "bulkspam":
+		CleanSpam(buff, content)
 	case "serverinfo":
 		ServerInfo(buff)
 	case "blur":
