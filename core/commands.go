@@ -199,14 +199,18 @@ func Kick(buffer *Buffer, content string) {
 }
 
 func CleanSpam(buffer *Buffer, content string) {
-	const MAX = 1000
+	if !moderation.HasPermission("manageMessages", GetPermissionsInt()) {
+		buffer.Content = "You don't have permission for this."
+		return
+	}
+	const MAX = 500
 	numberOfMessages, err := strconv.Atoi(RemoveCommand(content))
 	if err != nil {
 		buffer.Content = "Number of provided messages is invalid."
 		return
 	}
 	if numberOfMessages > MAX {
-		buffer.Content = "You have exceeded the maximum number of messages (1000)"
+		buffer.Content = "You have exceeded the maximum number of messages: " + strconv.Itoa(MAX)
 		return
 	}
 	// Get messages up to numberOfMessages
@@ -254,14 +258,14 @@ func CleanEmpty(messages []*discordgo.Message) []*discordgo.Message {
 func IsSpam(content string) bool {
 	// Short Characters finder
 	// TODO change this to a database
-	const spamRatio = 0.5
+	const spamRatio = 0.7
 	content = strings.TrimSpace(content)
 	shortCount := 0
 	wordList := strings.Split(content, " ")
 	// Regex for multi word messages
 	if wordList != nil {
 		for _, word := range wordList {
-			if len(word) < 3 {
+			if len(word) < 3 || len(word) > 10 {
 				shortCount += 1
 			}
 		}
@@ -284,11 +288,16 @@ func FindSpam(messages []*discordgo.Message) []*discordgo.Message {
 }
 
 func BulkDelete(buffer *Buffer, messages []*discordgo.Message) {
-	var total string
-	for _, message := range FindSpam(messages) {
-		total = total + " " + message.Content + "\n"
+	var total int
+	// Client.ChannelTyping(Message.ChannelID)
+	toRemove := FindSpam(messages)
+	for _, message := range toRemove {
+		err := Client.ChannelMessageDelete(Message.ChannelID, message.ID)
+		if err != nil {
+			total += 1
+		}
 	}
-	buffer.Content = total
+	buffer.Content = "Total correctly removed messages: " + strconv.Itoa(total) + ", found messages: " + strconv.Itoa(len(toRemove))
 }
 
 // Ban
@@ -956,7 +965,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		PrintFiles(buff)
 	case "info":
 		Info(buff)
-	case "bulkspam":
+	case "cleanspam":
 		CleanSpam(buff, content)
 	case "serverinfo":
 		ServerInfo(buff)
