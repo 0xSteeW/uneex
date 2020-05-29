@@ -691,14 +691,15 @@ func Avatar(buffer *Buffer, content string) {
 	var avatarFile []byte
 	var name string
 	var extension string
-	if content == "" {
+	mention := GetMentions(content)
+	if len(mention) == 0 {
 		avatarFile = DownloadToBytes(Message.Author.AvatarURL(""))
 		_, extension = GetFileType(avatarFile)
 		name = Message.Author.ID + extension
 	} else {
-		avatarFile = DownloadToBytes(GetMentions(content)[0].AvatarURL(""))
+		avatarFile = DownloadToBytes(mention[0].AvatarURL(""))
 		_, extension := GetFileType(avatarFile)
-		name = Mentions[0].ID + extension
+		name = mention[0].ID + extension
 	}
 	buffer.AddFile(name, avatarFile)
 }
