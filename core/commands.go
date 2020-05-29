@@ -198,6 +198,42 @@ func Kick(buffer *Buffer, content string) {
 	}
 }
 
+func Delete(buffer *Buffer, content string) {
+	if !moderation.HasPermission("manageMessages", GetPermissionsInt()) {
+		buffer.Content = "Sorry, you don't have enough permissions."
+		return
+	}
+	if RemoveCommand(content) == "" {
+		buffer.Content = "Number of messages hasn't been provided."
+		return
+	}
+	number, err := strconv.Atoi(RemoveCommand(content))
+	if err != nil || number > 100 || number <= 0 {
+		buffer.Content = "Provided number is too high (100) or not valid"
+		return
+	}
+	messages, err := Client.ChannelMessages(Message.ChannelID, number, "", "", "")
+	messageIDS := MessagesToString(messages)
+	err = Client.ChannelMessagesBulkDelete(Message.ChannelID, messageIDS)
+	if err != nil {
+		buffer.Content = "Couldn't delete messages."
+		return
+	}
+	buffer.Content = "Messages deleted successfully."
+
+}
+
+func MessagesToString(messages []*discordgo.Message) []string {
+	var final []string
+	if messages == nil {
+		return nil
+	}
+	for _, message := range messages {
+		final = append(final, message.ID)
+	}
+	return final
+}
+
 func CleanSpam(buffer *Buffer, content string) {
 	if !moderation.HasPermission("manageMessages", GetPermissionsInt()) {
 		buffer.Content = "You don't have permission for this."
@@ -209,8 +245,8 @@ func CleanSpam(buffer *Buffer, content string) {
 		buffer.Content = "Number of provided messages is invalid."
 		return
 	}
-	if numberOfMessages > MAX {
-		buffer.Content = "You have exceeded the maximum number of messages: " + strconv.Itoa(MAX)
+	if numberOfMessages > MAX || numberOfMessages <= 0 {
+		buffer.Content = "You have exceeded the maximum number of messages: " + strconv.Itoa(MAX) + " or a number lower than 1"
 		return
 	}
 	// Get messages up to numberOfMessages
@@ -320,7 +356,7 @@ func Ban(buffer *Buffer, content string) {
 			return
 		}
 		daysInt, err := strconv.Atoi(strings.TrimSpace(days[1]))
-		if err != nil {
+		if err != nil || daysInt <= 0 {
 			buffer.Content = "Number of days were not valid."
 			return
 		}
@@ -583,7 +619,7 @@ func Blur(buffer *Buffer, content string) {
 		return
 	}
 	sigma, err := strconv.Atoi(RemoveCommand(content))
-	if sigma > MAX_SIGMA {
+	if sigma > MAX_SIGMA || sigma <= 0 {
 		buffer.Content = "Sigma is too high. (MAXVAL: )" + strconv.Itoa(MAX_SIGMA)
 		buffer.FlushFiles()
 		return
@@ -630,6 +666,7 @@ func OpenIM(buffer *Buffer) (*imagick.MagickWand, *imagick.PixelWand) {
 		pw = imagick.NewPixelWand()
 
 	}
+	Client.ChannelTyping(Message.ChannelID)
 	return wand, pw
 }
 
@@ -968,6 +1005,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Info(buff)
 	case "cleanspam":
 		CleanSpam(buff, content)
+	case "cleanbulk":
+		Delete(buff, content)
 	case "serverinfo":
 		ServerInfo(buff)
 	case "blur":
@@ -1028,21 +1067,36 @@ func Help(buffer *Buffer) {
 	rowDebug := &discordgo.MessageEmbedField{Name: "debug", Value: "Replace buffer with debug info."}
 	rowBold := &discordgo.MessageEmbedField{Name: "bold", Value: "Turn text in buffer to bold."}
 	rowItalic := &discordgo.MessageEmbedField{Name: "italic", Value: "Turn text in buffer to italic."}
-	rowGrab := &discordgo.MessageEmbedField{Name: "grab, pick (messageID)", Value: "Copy the string content of the provided message ID into buffer. If no ID is specified it will copy latest message."}
+	rowGrab := &discordgo.MessageEmbedField{Name: "copy, grab, pick (messageID)", Value: "Copy the string content of the provided message ID into buffer. If no ID is specified it will copy latest message."}
 	rowCat := &discordgo.MessageEmbedField{Name: "cat (string)", Value: "Concatenate current buffer with the provided string."}
 	rowFlush := &discordgo.MessageEmbedField{Name: "flush", Value: "Completely empty current buffer, including files."}
 	rowCron := &discordgo.MessageEmbedField{Name: "cron", Value: "Work in progress."}
 	rowSyntax := &discordgo.MessageEmbedField{Name: "Syntax", Value: "Syntax: &command1 | &command2"}
 	rowReverse := &discordgo.MessageEmbedField{Name: "reverse", Value: "Reverses current buffer string."}
+	rowUpper := &discordgo.MessageEmbedField{Name: "upper", Value: "Capitalises current buffer."}
+
+	// Moderation commands
+
+	rowKick := &discordgo.MessageEmbedField{Name: "kick (IDS/Mentions) -r [Reason]", Value: "Kick one or multiple users. Mentions and ids are accepted. Use -r [reason] at the end to give a reason."}
+	rowBan := &discordgo.MessageEmbedField{Name: "ban (IDS/Mentions) -d (Days)", Value: "Ban one or multiple users. Mentions and ids are accepted. Use -d [days] to specify ban time."}
+	rowCleanSpam := &discordgo.MessageEmbedField{Name: "cleanspam (Max)", Value: "Clean possible spam messages, with a maximum of 500."}
+	rowCleanBulk := &discordgo.MessageEmbedField{Name: "cleanbulk (Max)", Value: "Clean all previous messages, with a maximum of 100."}
+	rowServerInfo := &discordgo.MessageEmbedField{Name: "serverinfo", Value: "Provide some basic server information."}
+	rowInfo := &discordgo.MessageEmbedField{Name: "info [Mention]", Value: "Provide some information about mentioned user. Defaults to you if no mentions are provided."}
 
 	// Image editing commands
 	//
-	rowAvatar := &discordgo.MessageEmbedField{Name: "avatar, av (mention)", Value: "Save your avatar image to the buffer. If you mention an user, it will be added instead."}
+	rowAvatar := &discordgo.MessageEmbedField{Name: "avatar, av [mention]", Value: "Save your avatar image to the buffer. If you mention an user, it will be added instead."}
 	rowServerIcon := &discordgo.MessageEmbedField{Name: "servericon", Value: "Push the server icon to the buffer."}
 	rowPrintFiles := &discordgo.MessageEmbedField{Name: "printfiles", Value: "Force print current files in the buffer."}
+	rowBlur := &discordgo.MessageEmbedField{Name: "blur (Amount)", Value: "Blur images on buffer, with a maximum amount of 50."}
+	rowInvert := &discordgo.MessageEmbedField{Name: "invert", Value: "Convert images on buffer to negative."}
+	rowRotate := &discordgo.MessageEmbedField{Name: "rotate (Direction)", Value: "Rotate images on buffer. Valid directions: up, down, left, right."}
+	rowUnemoji := &discordgo.MessageEmbedField{Name: "unemoji [Emoji]", Value: "Get downloadable image of an emoji. It can also get emojis from copied messages. Pushes images to the buffer."}
+	rowAddEmoji := &discordgo.MessageEmbedField{Name: "addemoji (Name)", Value: "Add images on buffer as emojis on the current server, with given name."}
 
 	// Append every help row
-	fields = []*discordgo.MessageEmbedField{rowSyntax, rowHelp, rowReverse, rowPing, rowReplace, rowShutdown, rowAvatar, rowEcho, rowPrint, rowLower, rowWc, rowServerIcon, rowDebug, rowBold, rowItalic, rowGrab, rowPrintFiles, rowCat, rowFlush, rowCron}
+	fields = []*discordgo.MessageEmbedField{rowSyntax, rowKick, rowBan, rowCleanBulk, rowCleanSpam, rowServerInfo, rowInfo, rowBlur, rowInvert, rowRotate, rowUnemoji, rowAddEmoji, rowHelp, rowReverse, rowPing, rowUpper, rowReplace, rowShutdown, rowAvatar, rowEcho, rowPrint, rowLower, rowWc, rowServerIcon, rowDebug, rowBold, rowItalic, rowGrab, rowPrintFiles, rowCat, rowFlush, rowCron}
 
 	embed := &discordgo.MessageEmbed{Title: "Help menu", Description: "Current commands. The bot prints the current buffer by default when the command ends.", Fields: fields}
 	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)

@@ -1,16 +1,38 @@
-Events:
-	##Channels
-	!DeleteChannel
-	!CreateChannel
-	ModifyChannel
++help
++ping
++replace
++shutdown
++echo
++print
++lower
++wc
++debug
++bold
++italic
++copy ////
++cat
++flush
++cron
++syntax
++reverse
++upper
 
-	##Text
-	!Send
-	Delete
-	
-	##Roles
-	Create
-	Modify
-	Delete
+// Moderation
++kick
++ban
++cleanspam
++cleanbulk
++serverinfo
++info
 
+
+// Image
++avatar
++servericon
++printfiles
++blur
++invert
++rotate
++unemoji
++addemoji
 
