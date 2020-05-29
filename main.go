@@ -95,7 +95,7 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 func PrefixHandler(message *discordgo.MessageCreate) (bool, string) {
 	if strings.HasPrefix(message.Content, config.Config("Prefix", "Default")) {
 		// Strip prefix
-		withoutPrefix := strings.TrimPrefix(message.ContentWithMentionsReplaced(), config.Config("Prefix", "Default"))
+		withoutPrefix := strings.TrimPrefix(message.Content, config.Config("Prefix", "Default"))
 		return true, withoutPrefix
 	}
 	return false, ""

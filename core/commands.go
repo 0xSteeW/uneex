@@ -51,18 +51,9 @@ func Ping(buffer *Buffer) {
 	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 }
 
-func CheckNameOnMentions(name string) bool {
-	for _, mention := range Mentions {
-		if mention.Username == name {
-			return true
-		}
-	}
-	return false
-}
-
 func GetMentions(content string) []*discordgo.User {
 	var userList []*discordgo.User
-	detectMention := regexp.MustCompile(`@.*`)
+	detectMention := regexp.MustCompile(`<@![0-9]{18}>`)
 	params := strings.Split(content, " ")
 	if len(params) == 0 {
 		return nil
@@ -74,8 +65,9 @@ func GetMentions(content string) []*discordgo.User {
 			if err == nil {
 				userList = append(userList, user)
 			}
-		} else if detectMention.MatchString(userid) && CheckNameOnMentions(userid[1:len(userid)-1]) {
-			user, err := Client.User(userid[1 : len(userid)-1])
+		} else if detectMention.MatchString(userid) {
+			name := userid[3 : len(userid)-1]
+			user, err := Client.User(name)
 			if err == nil {
 				userList = append(userList, user)
 			}
