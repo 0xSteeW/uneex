@@ -686,16 +686,17 @@ func Cat(buffer *Buffer, content string) {
 	buffer.Content = buffer.Content + OnlyRemoveCommand(content)
 }
 
-func Avatar(buffer *Buffer) {
+func Avatar(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
 	var avatarFile []byte
 	var name string
 	var extension string
-	if len(Mentions) == 0 {
+	if content == "" {
 		avatarFile = DownloadToBytes(Message.Author.AvatarURL(""))
 		_, extension = GetFileType(avatarFile)
 		name = Message.Author.ID + extension
 	} else {
-		avatarFile = DownloadToBytes(Mentions[0].AvatarURL(""))
+		avatarFile = DownloadToBytes(GetMentions(content)[0].AvatarURL(""))
 		_, extension := GetFileType(avatarFile)
 		name = Mentions[0].ID + extension
 	}
@@ -932,7 +933,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 			buff.Content = "Sorry, I don't think you have enough permissions to use this."
 		}
 	case "avatar", "av":
-		Avatar(buff)
+		Avatar(buff, content)
 	case "echo":
 		buff.Content = RemoveCommand(content)
 	case "upper":
