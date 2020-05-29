@@ -57,7 +57,7 @@ func main() {
 		panic(err)
 	}
 	guilds := client.State.Guilds
-	game := &discordgo.Game{Name: strconv.Itoa(len(guilds)) + " Guilds!"}
+	game := &discordgo.Game{Name: strconv.Itoa(len(guilds)) + " Guilds! &help"}
 	status := &discordgo.UpdateStatusData{Game: game}
 	client.UpdateStatusComplex(*status)
 	fmt.Println("Client started")

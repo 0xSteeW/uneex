@@ -36,7 +36,8 @@ func Ping(buffer *Buffer) {
 	fieldPingNormal := &discordgo.MessageEmbedField{Name: "Truncated", Value: latency.String()}
 	fieldPingNanoseconds := &discordgo.MessageEmbedField{Name: "Nanoseconds", Value: strconv.FormatInt(latency.Nanoseconds(), 10)}
 	fieldPingMicroseconds := &discordgo.MessageEmbedField{Name: "Microseconds", Value: strconv.FormatInt(latency.Microseconds(), 10)}
-	fields = []*discordgo.MessageEmbedField{fieldPingNormal, fieldPingNanoseconds, fieldPingMicroseconds}
+	fieldPingShards := &discordgo.MessageEmbedField{Name: "Shards", Value: strconv.Itoa(Client.ShardCount)}
+	fields = []*discordgo.MessageEmbedField{fieldPingNormal, fieldPingNanoseconds, fieldPingMicroseconds, fieldPingShards}
 	var color int
 	var description string
 	if latency.Microseconds() > 200000 {
@@ -723,7 +724,7 @@ func Nick(buffer *Buffer, content string) {
 		buffer.Content = "Some users could not be nicknamed."
 		return
 	}
-	buffer.Content = "Successfully renamed all mentioned users to: " + nick + " " + strconv.Itoa(count) + "/" + strconv.Itoa(total)
+	buffer.Content = "Successfully renamed " + strconv.Itoa(count) + "/" + strconv.Itoa(total) + " mentioned users to: " + nick
 }
 
 func ServerIcon(buffer *Buffer) {
