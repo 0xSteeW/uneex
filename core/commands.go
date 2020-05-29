@@ -51,6 +51,39 @@ func Ping(buffer *Buffer) {
 	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 }
 
+func CheckNameOnMentions(name string) bool {
+	for _, mention := range Mentions {
+		if mention.Username == name {
+			return true
+		}
+	}
+	return false
+}
+
+func GetMentions(content string) []*discordgo.User {
+	var userList []*discordgo.User
+	detectMention := regexp.MustCompile(`@.*`)
+	params := strings.Split(content, " ")
+	if len(params) == 0 {
+		return nil
+	}
+	for _, userid := range params {
+		userid = strings.TrimSpace(userid)
+		if len(userid) == 18 {
+			user, err := Client.User(userid)
+			if err == nil {
+				userList = append(userList, user)
+			}
+		} else if detectMention.MatchString(userid) && CheckNameOnMentions(userid[1:len(userid)-1]) {
+			user, err := Client.User(userid[1 : len(userid)-1])
+			if err == nil {
+				userList = append(userList, user)
+			}
+		}
+	}
+	return userList
+}
+
 // Time functions with time.Now()
 func Timer(start time.Time) string {
 
@@ -130,18 +163,6 @@ func FormatSliceToString(slice []string) string {
 	return strings.TrimSpace(final)
 }
 
-func GetUsersFromID(userIDS []string) []*discordgo.User {
-	var final []*discordgo.User
-	for _, userID := range userIDS {
-		user, err := Client.User(userID)
-		if err != nil {
-			continue
-		}
-		final = append(final, user)
-	}
-	return final
-}
-
 func Kick(buffer *Buffer, content string) {
 	if moderation.HasPermission("kick", GetPermissionsInt()) {
 		params := strings.Split(RemoveCommand(content), "-r")
@@ -154,9 +175,10 @@ func Kick(buffer *Buffer, content string) {
 			reason = params[1]
 			paramsLeft = params[0]
 		}
-		if len(Mentions) >= 1 {
+		mentions := GetMentions(paramsLeft)
+		if len(mentions) > 0 {
 			var err error
-			for _, userToKick := range Mentions {
+			for _, userToKick := range mentions {
 				if reason != "" {
 					err = Client.GuildMemberDeleteWithReason(Message.GuildID, userToKick.ID, reason)
 				} else {
@@ -169,39 +191,7 @@ func Kick(buffer *Buffer, content string) {
 				buffer.Content = "Successfully kicked all users."
 			}
 		} else {
-			// Slice again to find ids
-			ids := strings.Split(paramsLeft, " ")
-			if len(ids) == 0 {
-				buffer.Content = "No mentions or ID have been provided"
-				return
-			}
-			validID := regexp.MustCompile(`[0-9]{18}`)
-			var validIDS []string
-			for _, ID := range ids {
-				ID = strings.TrimSpace(ID)
-				if validID.Match([]byte(ID)) {
-					validIDS = append(validIDS, ID)
-				}
-			}
-			// Found valid ids, now lets get users
-			users := GetUsersFromID(validIDS)
-			if users == nil {
-				buffer.Content = "Provided IDs were not valid."
-				return
-			}
-			var err error
-			for _, user := range users {
-				if reason != "" {
-					err = Client.GuildMemberDeleteWithReason(Message.GuildID, user.ID, reason)
-				} else {
-					err = Client.GuildMemberDelete(Message.GuildID, user.ID)
-				}
-			}
-			if err != nil {
-				buffer.Content = "One or more users could not be kicked."
-			} else {
-				buffer.Content = "Successfully kicked all users."
-			}
+			buffer.Content = "You didn't provide any user."
 		}
 	} else {
 		buffer.Content = "Sorry, you don't have permission for this."
@@ -370,7 +360,8 @@ func Ban(buffer *Buffer, content string) {
 			buffer.Content = "Number of days were not valid."
 			return
 		}
-		if len(Mentions) >= 1 {
+		mentions := GetMentions(paramsLeft)
+		if len(mentions) > 0 {
 			var err error
 			for _, userToKick := range Mentions {
 				if reason != "" {
@@ -385,39 +376,7 @@ func Ban(buffer *Buffer, content string) {
 				buffer.Content = "Successfully banned all users."
 			}
 		} else {
-			// Slice again to find ids
-			ids := strings.Split(paramsLeft, " ")
-			if len(ids) == 0 {
-				buffer.Content = "No mentions or ID have been provided"
-				return
-			}
-			validID := regexp.MustCompile(`[0-9]{18}`)
-			var validIDS []string
-			for _, ID := range ids {
-				ID = strings.TrimSpace(ID)
-				if validID.Match([]byte(ID)) {
-					validIDS = append(validIDS, ID)
-				}
-			}
-			// Found valid ids, now lets get users
-			users := GetUsersFromID(validIDS)
-			if users == nil {
-				buffer.Content = "Provided IDs were not valid."
-				return
-			}
-			var err error
-			for _, user := range users {
-				if reason != "" {
-					err = Client.GuildBanCreateWithReason(Message.GuildID, user.ID, reason, daysInt)
-				} else {
-					err = Client.GuildBanCreate(Message.GuildID, user.ID, daysInt)
-				}
-			}
-			if err != nil {
-				buffer.Content = "One or more users could not be banned."
-			} else {
-				buffer.Content = "Successfully banned all users."
-			}
+			buffer.Content = "You didn't provide any user."
 		}
 	} else {
 		buffer.Content = "Sorry, you don't have permission for this."
@@ -750,6 +709,31 @@ func Avatar(buffer *Buffer) {
 	buffer.AddFile(name, avatarFile)
 }
 
+func Nick(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	params := strings.Split(content, "-n")
+	nick := strings.TrimSpace(params[1])
+	if len(params) <= 1 {
+		buffer.Content = "Nickname or mentions not provided."
+		return
+	}
+	mentions := GetMentions(content)
+	var err error
+	var count int
+	total := len(mentions)
+	for _, user := range mentions {
+		err = Client.GuildMemberNickname(Message.GuildID, user.ID, nick)
+		if err == nil {
+			count += 1
+		}
+	}
+	if err != nil {
+		buffer.Content = "Some users could not be nicknamed."
+		return
+	}
+	buffer.Content = "Successfully renamed all mentioned users to: " + nick + " " + strconv.Itoa(count) + "/" + strconv.Itoa(total)
+}
+
 func ServerIcon(buffer *Buffer) {
 	guild, err := Client.Guild(Message.GuildID)
 	if err != nil {
@@ -1021,6 +1005,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		ServerInfo(buff)
 	case "blur":
 		Blur(buff, content)
+	case "nick":
+		Nick(buff, content)
 	case "invert":
 		Invert(buff)
 	case "rotate":

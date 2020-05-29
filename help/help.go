@@ -95,8 +95,9 @@ func ModerationEmbedFields() []*discordgo.MessageEmbedField {
 	rowCleanSpam := &discordgo.MessageEmbedField{Name: "cleanspam (Max)", Value: "Clean possible spam messages, with a maximum of 500."}
 	rowCleanBulk := &discordgo.MessageEmbedField{Name: "cleanbulk (Max)", Value: "Clean all previous messages, with a maximum of 100."}
 	rowServerInfo := &discordgo.MessageEmbedField{Name: "serverinfo", Value: "Provide some basic server information."}
+	rowNick := &discordgo.MessageEmbedField{Name: "nick (IDS/Mentions) -n (name)", Value: "Rename all mentioned users. To set the nickname use -n nickname at the end."}
 	rowInfo := &discordgo.MessageEmbedField{Name: "info [Mention]", Value: "Provide some information about mentioned user. Defaults to you if no mentions are provided."}
-	return []*discordgo.MessageEmbedField{rowBan, rowCleanBulk, rowCleanSpam, rowInfo, rowKick, rowServerInfo}
+	return []*discordgo.MessageEmbedField{rowBan, rowCleanBulk, rowCleanSpam, rowInfo, rowKick, rowNick, rowServerInfo}
 }
 
 func ImageEmbedFields() []*discordgo.MessageEmbedField {
