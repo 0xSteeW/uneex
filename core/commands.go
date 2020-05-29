@@ -704,11 +704,11 @@ func Avatar(buffer *Buffer) {
 func Nick(buffer *Buffer, content string) {
 	content = RemoveCommand(content)
 	params := strings.Split(content, "-n")
-	nick := strings.TrimSpace(params[1])
 	if len(params) <= 1 {
 		buffer.Content = "Nickname or mentions not provided."
 		return
 	}
+	nick := strings.TrimSpace(params[1])
 	mentions := GetMentions(content)
 	var err error
 	var count int
