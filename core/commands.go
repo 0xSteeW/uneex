@@ -376,16 +376,16 @@ func Ban(buffer *Buffer, content string) {
 }
 
 // TODO
-func Info(buffer *Buffer) {
+func Info(buffer *Buffer, content string) {
 	// Parse user
 	//
 	var user *discordgo.User
 	var joinedTime time.Time
 
-	if len(Mentions) == 0 {
+	if RemoveCommand(content) == "" {
 		user = Message.Author
 	} else {
-		user = Mentions[0]
+		user = GetMentions(RemoveCommand(content))[0]
 	}
 	userField := &discordgo.MessageEmbedField{Name: "User", Value: user.String(), Inline: true}
 	guild, err := Client.Guild(Message.GuildID)
@@ -988,7 +988,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	case "printfiles":
 		PrintFiles(buff)
 	case "info":
-		Info(buff)
+		Info(buff, content)
 	case "cleanspam":
 		CleanSpam(buff, content)
 	case "cleanbulk":
