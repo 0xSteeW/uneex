@@ -14,6 +14,7 @@ import (
 	"time"
 	config "uneex/config"
 	databases "uneex/databases"
+	help "uneex/help"
 	"uneex/moderation"
 
 	"github.com/bwmarrin/discordgo"
@@ -36,7 +37,16 @@ func Ping(buffer *Buffer) {
 	fieldPingNanoseconds := &discordgo.MessageEmbedField{Name: "Nanoseconds", Value: strconv.FormatInt(latency.Nanoseconds(), 10)}
 	fieldPingMicroseconds := &discordgo.MessageEmbedField{Name: "Microseconds", Value: strconv.FormatInt(latency.Microseconds(), 10)}
 	fields = []*discordgo.MessageEmbedField{fieldPingNormal, fieldPingNanoseconds, fieldPingMicroseconds}
-	embed := &discordgo.MessageEmbed{Title: "Pong!", Description: "Successful ping! Showing RTT:", Fields: fields, Color: 0x00ff00}
+	var color int
+	var description string
+	if latency.Microseconds() > 200000 {
+		color = 0xff0000
+		description = "Uh oh, something's wrong with the ping..."
+	} else {
+		color = 0x00ff00
+		description = "Successful ping!"
+	}
+	embed := &discordgo.MessageEmbed{Title: "Pong!", Description: description, Fields: fields, Color: color}
 
 	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 }
@@ -932,7 +942,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 
 	switch strings.ToLower(strings.TrimPrefix(command, "&")) {
 	case "help":
-		Help(buff)
+		Help(buff, content)
 	case "ping":
 		Ping(buff)
 	case "substitute", "replace":
@@ -1053,51 +1063,16 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	}
 }
 
-func Help(buffer *Buffer) {
-	var fields []*discordgo.MessageEmbedField
-	// Text editing commands
-	rowHelp := &discordgo.MessageEmbedField{Name: "help", Value: "Help shows a simple help command"}
-	rowPing := &discordgo.MessageEmbedField{Name: "ping", Value: "Show a simple RTT menu"}
-	rowReplace := &discordgo.MessageEmbedField{Name: "substitute, replace (old -n new)", Value: "Replace string from the buffer content with another of your choosing. To separate old string and new one please use the -n flag"}
-	rowShutdown := &discordgo.MessageEmbedField{Name: "shutdown", Value: "Don't you try it..."}
-	rowEcho := &discordgo.MessageEmbedField{Name: "echo", Value: "Push a string to the current buffer. It will replace any previous strings on it."}
-	rowPrint := &discordgo.MessageEmbedField{Name: "print", Value: "Force to print the content in the buffer before the command ends."}
-	rowLower := &discordgo.MessageEmbedField{Name: "lower", Value: "Lower the content in the buffer."}
-	rowWc := &discordgo.MessageEmbedField{Name: "wc", Value: "Count characters in the buffer content including spaces."}
-	rowDebug := &discordgo.MessageEmbedField{Name: "debug", Value: "Replace buffer with debug info."}
-	rowBold := &discordgo.MessageEmbedField{Name: "bold", Value: "Turn text in buffer to bold."}
-	rowItalic := &discordgo.MessageEmbedField{Name: "italic", Value: "Turn text in buffer to italic."}
-	rowGrab := &discordgo.MessageEmbedField{Name: "copy, grab, pick (messageID)", Value: "Copy the string content of the provided message ID into buffer. If no ID is specified it will copy latest message."}
-	rowCat := &discordgo.MessageEmbedField{Name: "cat (string)", Value: "Concatenate current buffer with the provided string."}
-	rowFlush := &discordgo.MessageEmbedField{Name: "flush", Value: "Completely empty current buffer, including files."}
-	rowCron := &discordgo.MessageEmbedField{Name: "cron", Value: "Work in progress."}
-	rowSyntax := &discordgo.MessageEmbedField{Name: "Syntax", Value: "Syntax: &command1 | &command2"}
-	rowReverse := &discordgo.MessageEmbedField{Name: "reverse", Value: "Reverses current buffer string."}
-	rowUpper := &discordgo.MessageEmbedField{Name: "upper", Value: "Capitalises current buffer."}
-
-	// Moderation commands
-
-	rowKick := &discordgo.MessageEmbedField{Name: "kick (IDS/Mentions) -r [Reason]", Value: "Kick one or multiple users. Mentions and ids are accepted. Use -r [reason] at the end to give a reason."}
-	rowBan := &discordgo.MessageEmbedField{Name: "ban (IDS/Mentions) -d (Days)", Value: "Ban one or multiple users. Mentions and ids are accepted. Use -d [days] to specify ban time."}
-	rowCleanSpam := &discordgo.MessageEmbedField{Name: "cleanspam (Max)", Value: "Clean possible spam messages, with a maximum of 500."}
-	rowCleanBulk := &discordgo.MessageEmbedField{Name: "cleanbulk (Max)", Value: "Clean all previous messages, with a maximum of 100."}
-	rowServerInfo := &discordgo.MessageEmbedField{Name: "serverinfo", Value: "Provide some basic server information."}
-	rowInfo := &discordgo.MessageEmbedField{Name: "info [Mention]", Value: "Provide some information about mentioned user. Defaults to you if no mentions are provided."}
-
-	// Image editing commands
-	//
-	rowAvatar := &discordgo.MessageEmbedField{Name: "avatar, av [mention]", Value: "Save your avatar image to the buffer. If you mention an user, it will be added instead."}
-	rowServerIcon := &discordgo.MessageEmbedField{Name: "servericon", Value: "Push the server icon to the buffer."}
-	rowPrintFiles := &discordgo.MessageEmbedField{Name: "printfiles", Value: "Force print current files in the buffer."}
-	rowBlur := &discordgo.MessageEmbedField{Name: "blur (Amount)", Value: "Blur images on buffer, with a maximum amount of 50."}
-	rowInvert := &discordgo.MessageEmbedField{Name: "invert", Value: "Convert images on buffer to negative."}
-	rowRotate := &discordgo.MessageEmbedField{Name: "rotate (Direction)", Value: "Rotate images on buffer. Valid directions: up, down, left, right."}
-	rowUnemoji := &discordgo.MessageEmbedField{Name: "unemoji [Emoji]", Value: "Get downloadable image of an emoji. It can also get emojis from copied messages. Pushes images to the buffer."}
-	rowAddEmoji := &discordgo.MessageEmbedField{Name: "addemoji (Name)", Value: "Add images on buffer as emojis on the current server, with given name."}
-
-	// Append every help row
-	fields = []*discordgo.MessageEmbedField{rowSyntax, rowKick, rowBan, rowCleanBulk, rowCleanSpam, rowServerInfo, rowInfo, rowBlur, rowInvert, rowRotate, rowUnemoji, rowAddEmoji, rowHelp, rowReverse, rowPing, rowUpper, rowReplace, rowShutdown, rowAvatar, rowEcho, rowPrint, rowLower, rowWc, rowServerIcon, rowDebug, rowBold, rowItalic, rowGrab, rowPrintFiles, rowCat, rowFlush, rowCron}
-
-	embed := &discordgo.MessageEmbed{Title: "Help menu", Description: "Current commands. The bot prints the current buffer by default when the command ends.", Fields: fields}
-	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
+func Help(buffer *Buffer, content string) {
+	var topic string
+	if RemoveCommand(content) == "" {
+		topic = "basic"
+	} else {
+		topic = RemoveCommand(content)
+	}
+	helpEmbed := help.GenerateHelp(topic)
+	_, err := Client.ChannelMessageSendEmbed(Message.ChannelID, helpEmbed)
+	if err != nil {
+		buffer.Content = "Could not send help. " + err.Error()
+	}
 }
