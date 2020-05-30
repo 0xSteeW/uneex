@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	config "uneex/config"
@@ -15,6 +14,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-ini/ini"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/jonas747/dshardmanager"
 	"gopkg.in/gographics/imagick.v3/imagick"
 )
 
@@ -41,14 +41,16 @@ func main() {
 		panic(err)
 	}
 	// Create discord bot session and handle any errors adequately
-	client, err := discordgo.New("Bot " + config.Config("Token", "Owner"))
+	// client, err := discordgo.New("Bot " + config.Config("Token", "Owner"))
+	client := dshardmanager.New("Bot " + config.Config("Token", "Owner"))
 	if err != nil {
 		panic(err)
 	}
 	// Handlers
 	client.AddHandler(OnMessageCreate)
+	client.Init()
 	// Client session should be open now if no errors had occurred
-	err = client.Open()
+	err = client.Start()
 	// Start cron handler
 	// stop := make(chan bool)
 	// FIXME Temporarily disable cron worker for debug
@@ -56,10 +58,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	guilds := client.State.Guilds
-	game := &discordgo.Game{Name: strconv.Itoa(len(guilds)) + " Guilds! &help"}
-	status := &discordgo.UpdateStatusData{Game: game}
-	client.UpdateStatusComplex(*status)
 	fmt.Println("Client started")
 	// Handle syscalls to quit bot gracefully and close database connection
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
@@ -67,7 +65,7 @@ func main() {
 
 	// Close connections
 	databases.Database.Close()
-	client.Close()
+	client.StopAll()
 }
 
 // Handlers

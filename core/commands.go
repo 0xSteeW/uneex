@@ -52,6 +52,44 @@ func Ping(buffer *Buffer) {
 	Client.ChannelMessageSendEmbed(Message.ChannelID, embed)
 }
 
+// Crypto section
+func Base64Decode(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	var base string
+	if content == "" {
+		if buffer.Content != "" {
+			base = buffer.Content
+		} else {
+			buffer.Content = "You didnt provide any string"
+			return
+		}
+	} else {
+		base = content
+	}
+	decoded, err := base64.StdEncoding.DecodeString(base)
+	if err != nil {
+		buffer.Content = "Could not decode string."
+		return
+	}
+	buffer.Content = string(decoded)
+}
+
+func Base64Encode(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	var base string
+	if content == "" {
+		if buffer.Content != "" {
+			base = buffer.Content
+		} else {
+			buffer.Content = "You didnt provide any string"
+			return
+		}
+	} else {
+		base = content
+	}
+	buffer.Content = base64.StdEncoding.EncodeToString([]byte(base))
+}
+
 func GetMentions(content string) []*discordgo.User {
 	var userList []*discordgo.User
 	detectMention := regexp.MustCompile(`<@![0-9]{18}>`)
@@ -129,7 +167,7 @@ func GetPermissionsInt() int {
 func StripMentions(content string) (params []string, mentionSlice []string) {
 	content = RemoveCommand(content)
 	listOfParams := strings.Split(content, " ")
-	mention := regexp.MustCompile(`@.*`)
+	mention := regexp.MustCompile(`<@![0-9]{18}>`)
 	if len(listOfParams) == 0 {
 		return nil, nil
 	}
@@ -471,6 +509,29 @@ func Count(buffer *Buffer) {
 	runeArr := []rune(buffer.Content)
 	buffer.Content = strconv.Itoa(len(runeArr))
 
+}
+
+func DeleteEmoji(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	if content == "" {
+		buffer.Content = "You didn't provide an emoji"
+		return
+	}
+	// Get emoji id
+	guild, _ := Client.Guild(Message.GuildID)
+	emojis := guild.Emojis
+	var ID string
+	for _, emoji := range emojis {
+		if emoji.Name == strings.TrimSpace(content) {
+			ID = emoji.ID
+		}
+	}
+	err := Client.GuildEmojiDelete(Message.GuildID, ID)
+	if err != nil {
+		buffer.Content = "Could not find or delete emoji."
+		return
+	}
+	buffer.Content = "Emoji successfully deleted."
 }
 
 func AddEmoji(buffer *Buffer, content string) {
@@ -1017,6 +1078,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Nick(buff, content)
 	case "invert":
 		Invert(buff)
+	case "b64encode":
+		Base64Encode(buff, content)
+	case "b64decode":
+		Base64Decode(buff, content)
 	case "rotate":
 		Rotate(buff, content)
 	case "cat":
@@ -1025,6 +1090,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Unemoji(buff, content)
 	case "addemoji":
 		AddEmoji(buff, content)
+	case "deleteemoji":
+		DeleteEmoji(buff, content)
 	case "flush":
 		buff.Content = ""
 		buff.Files = nil
