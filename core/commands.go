@@ -318,7 +318,6 @@ func FindSpam(messages []*discordgo.Message) []*discordgo.Message {
 }
 
 func BulkDelete(buffer *Buffer, messages []*discordgo.Message) {
-	var total int
 	var err error
 	var rounds int
 	var left int
@@ -340,7 +339,7 @@ func BulkDelete(buffer *Buffer, messages []*discordgo.Message) {
 	if err != nil {
 		buffer.Content = "Some messages could not be deleted."
 	}
-	buffer.Content = "Total correctly removed messages: " + strconv.Itoa(total) + ", found messages: " + strconv.Itoa(len(messages))
+	buffer.Content = "Total correctly removed messages: " + strconv.Itoa(len(messages))
 }
 
 // Ban
