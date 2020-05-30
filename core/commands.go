@@ -232,7 +232,8 @@ func CleanSpam(buffer *Buffer, content string) {
 		buffer.Content = "You don't have permission for this."
 		return
 	}
-	const MAX = 500
+	MAX_RAW := config.Config("MaxSpamMessages", "Default")
+	MAX, _ := strconv.Atoi(MAX_RAW)
 	numberOfMessages, err := strconv.Atoi(RemoveCommand(content))
 	if err != nil {
 		buffer.Content = "Number of provided messages is invalid."
@@ -271,7 +272,7 @@ func CleanSpam(buffer *Buffer, content string) {
 	messages, err := Client.ChannelMessages(Message.ChannelID, left, lastMessageID, "", "")
 	messageList = append(messageList, messages...)
 
-	BulkDelete(buffer, messageList)
+	BulkDelete(buffer, FindSpam(messageList))
 }
 
 func CleanEmpty(messages []*discordgo.Message) []*discordgo.Message {
@@ -319,15 +320,27 @@ func FindSpam(messages []*discordgo.Message) []*discordgo.Message {
 func BulkDelete(buffer *Buffer, messages []*discordgo.Message) {
 	var total int
 	var err error
-	Client.ChannelTyping(Message.ChannelID)
-	toRemove := FindSpam(messages)
-	for _, message := range toRemove {
-		err = Client.ChannelMessageDelete(Message.ChannelID, message.ID)
-		if err == nil {
-			total = total + 1
-		}
+	var rounds int
+	var left int
+
+	rounds = int(math.Trunc(float64(len(messages) / 100)))
+	left = len(messages) - (rounds * 100)
+
+	if len(messages) < 100 {
+		left = len(messages)
+		rounds = -1
 	}
-	buffer.Content = "Total correctly removed messages: " + strconv.Itoa(total) + ", found messages: " + strconv.Itoa(len(toRemove))
+	Client.ChannelTyping(Message.ChannelID)
+	for i := 0; i <= rounds; i++ {
+		err = Client.ChannelMessagesBulkDelete(Message.ChannelID, MessagesToString(messages[i*100:(i+1)*100]))
+	}
+	if left > 0 {
+		err = Client.ChannelMessagesBulkDelete(Message.ChannelID, MessagesToString(messages[:left]))
+	}
+	if err != nil {
+		buffer.Content = "Some messages could not be deleted."
+	}
+	buffer.Content = "Total correctly removed messages: " + strconv.Itoa(total) + ", found messages: " + strconv.Itoa(len(messages))
 }
 
 // Ban
@@ -576,7 +589,8 @@ func Reverse(buffer *Buffer) {
 
 func Blur(buffer *Buffer, content string) {
 	wand, pw := OpenIM(buffer)
-	MAX_SIGMA := 50
+	MAX_SIGMA_RAW := config.Config("MaxSigma", "Default")
+	MAX_SIGMA, _ := strconv.Atoi(MAX_SIGMA_RAW)
 	if wand == nil || pw == nil {
 		return
 	}
