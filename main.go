@@ -21,6 +21,7 @@ import (
 // Globals
 
 var sc chan os.Signal = make(chan os.Signal, 1)
+var Manager *dshardmanager.Manager
 
 func init() {
 	// Perform initial operations, opening databases and checking config files
@@ -42,15 +43,15 @@ func main() {
 	}
 	// Create discord bot session and handle any errors adequately
 	// client, err := discordgo.New("Bot " + config.Config("Token", "Owner"))
-	client := dshardmanager.New("Bot " + config.Config("Token", "Owner"))
+	Manager = dshardmanager.New("Bot " + config.Config("Token", "Owner"))
 	if err != nil {
 		panic(err)
 	}
 	// Handlers
-	client.AddHandler(OnMessageCreate)
-	client.Init()
+	Manager.AddHandler(OnMessageCreate)
+	Manager.Init()
 	// Client session should be open now if no errors had occurred
-	err = client.Start()
+	err = Manager.Start()
 	// Start cron handler
 	// stop := make(chan bool)
 	// FIXME Temporarily disable cron worker for debug
@@ -65,7 +66,7 @@ func main() {
 
 	// Close connections
 	databases.Database.Close()
-	client.StopAll()
+	Manager.StopAll()
 }
 
 // Handlers
@@ -87,7 +88,7 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 		Mentions = message.Mentions
 	}
 	// Handle the rest of the command, it should have the prefix trimmed as well as the mentions
-	commands.CommandHandler(client, message, Content, Mentions, sc)
+	commands.CommandHandler(client, message, Content, Mentions, sc, Manager)
 }
 
 func PrefixHandler(message *discordgo.MessageCreate) (bool, string) {

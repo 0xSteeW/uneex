@@ -18,6 +18,7 @@ import (
 	"uneex/moderation"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jonas747/dshardmanager"
 	"gopkg.in/gographics/imagick.v3/imagick"
 )
 
@@ -28,7 +29,14 @@ var Client *discordgo.Session
 var Message *discordgo.MessageCreate
 var Content string
 var Mentions []*discordgo.User
+var Manager *dshardmanager.Manager
 var SC *chan os.Signal
+
+func ThisShard(buffer *Buffer) {
+	ID, _ := strconv.Atoi(Message.GuildID)
+	shard := Manager.SessionForGuild(int64(ID))
+	buffer.Content = strconv.Itoa(shard.ShardID)
+}
 
 func Ping(buffer *Buffer) {
 	latency := Client.HeartbeatLatency()
@@ -945,7 +953,7 @@ func (buff *Buffer) HandleEachPipe() {
 		if cmds[0] == "&pipe" {
 			continue
 		}
-		CommandHandler(Client, Message, next, Mentions, *SC, buff)
+		CommandHandler(Client, Message, next, Mentions, *SC, Manager, buff)
 		buff.Pop()
 	}
 	// By default print if the buffer is on the end
@@ -967,7 +975,7 @@ func (buff *Buffer) Clean() {
 	buff.Next = cleaned
 }
 
-func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate, content string, mentions []*discordgo.User, sc chan os.Signal, currentBuffer ...*Buffer) {
+func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate, content string, mentions []*discordgo.User, sc chan os.Signal, manager *dshardmanager.Manager, currentBuffer ...*Buffer) {
 	// Receive content with mentions stripped
 	// Global variabelto use
 	// Handle spaces
@@ -975,6 +983,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	Client = client
 	Message = message
 	Content = content
+	Manager = manager
 	Mentions = mentions
 	SC = &sc
 	origin := message.ChannelID
@@ -1082,6 +1091,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Base64Encode(buff, content)
 	case "b64decode":
 		Base64Decode(buff, content)
+	case "shardid":
+		ThisShard(buff)
 	case "rotate":
 		Rotate(buff, content)
 	case "cat":
