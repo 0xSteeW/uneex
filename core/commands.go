@@ -520,6 +520,10 @@ func Count(buffer *Buffer) {
 }
 
 func DeleteEmoji(buffer *Buffer, content string) {
+	if !moderation.HasPermission("manageEmojis", GetPermissionsInt()) {
+		buffer.Content = "You don't have permission for this."
+		return
+	}
 	content = RemoveCommand(content)
 	if content == "" {
 		buffer.Content = "You didn't provide an emoji"
