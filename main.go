@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	config "uneex/config"
@@ -60,6 +61,7 @@ func main() {
 		panic(err)
 	}
 	fmt.Println("Client started")
+	ChangeStatus()
 	// Handle syscalls to quit bot gracefully and close database connection
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
@@ -67,6 +69,13 @@ func main() {
 	// Close connections
 	databases.Database.Close()
 	Manager.StopAll()
+}
+
+func ChangeStatus() {
+	for _, session := range Manager.Sessions {
+		totalGuilds := Manager.GetFullStatus().NumGuilds
+		session.UpdateListeningStatus(strconv.Itoa(totalGuilds))
+	}
 }
 
 // Handlers
