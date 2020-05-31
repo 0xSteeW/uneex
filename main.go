@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	config "uneex/config"
 	commands "uneex/core"
 	databases "uneex/databases"
@@ -23,10 +24,57 @@ import (
 
 var sc chan os.Signal = make(chan os.Signal, 1)
 var Manager *dshardmanager.Manager
+var coolDown float64
+var spamLimit int
+
+// Create a temporary storage to check the last message time of an user, to prevent spam. This will also be a cooldown and will be pushed to
+// the proper database when it's made,
+//
+var lastMessageList map[string]*lastMessage
+
+type lastMessage struct {
+	Timestamp   time.Time
+	Message     *discordgo.MessageCreate
+	LastWasSpam bool
+	Count       int
+}
+
+func (lm *lastMessage) ToggleTrue() {
+	lm.LastWasSpam = true
+}
+
+func (lm *lastMessage) ToggleFalse() {
+	lm.LastWasSpam = false
+}
+
+func (lm *lastMessage) Reset() {
+	lm.Count = 0
+}
+
+func (lm *lastMessage) Up() {
+	lm.Count += 1
+}
+
+func (lm *lastMessage) SetTS(ts time.Time) {
+	lm.Timestamp = ts
+}
+
+func (lm *lastMessage) SetMessage(message *discordgo.MessageCreate) {
+	lm.Message = message
+}
+
+func (lm *lastMessage) CoolDown() bool {
+	since := time.Since(lm.Timestamp).Seconds()
+	if since < float64(coolDown) {
+		return true
+	}
+	return false
+}
 
 func init() {
 	// Perform initial operations, opening databases and checking config files
 	// Greet in console when ready
+	lastMessageList = make(map[string]*lastMessage)
 	fmt.Println("Starting Uneex bot")
 	imagick.Initialize()
 }
@@ -38,6 +86,9 @@ func main() {
 	config.Conf, _ = ini.Load("config/config.ini")
 	fmt.Println(config.Config("Version"))
 	// Open database for use
+	coolDownRaw, _ := strconv.Atoi(config.Config("CoolDownTime", "Default"))
+	coolDown = float64(coolDownRaw)
+	spamLimit, _ = strconv.Atoi(config.Config("SpamLimit", "Default"))
 	databases.Database, err = sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", config.Config("User", "Maria"), config.Config("Password", "Maria"), config.Config("Name", "Maria")))
 	if err != nil {
 		panic(err)
@@ -82,9 +133,39 @@ func ChangeStatus() {
 //
 func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate) {
 	// Check if the message contains the bot's prefix
+	// Check lastMessageList for spam
+
 	if message.Author.Bot {
 		return
 	}
+
+	messageTime := time.Now()
+
+	if lm, ok := lastMessageList[message.Author.ID]; ok && lm.CoolDown() {
+		if lm.LastWasSpam && lm.Count > spamLimit {
+			client.ChannelMessageSend(message.ChannelID, "Don't spam! "+message.Author.String())
+			lm.Reset()
+			lm.ToggleFalse()
+		} else if lm.LastWasSpam && lm.Count < spamLimit && lm.Count > 0 {
+			fmt.Println("More spam count:", lm.Count)
+			lm.Up()
+		} else {
+			fmt.Println("First spam count")
+			lm.ToggleTrue()
+			lm.Up()
+		}
+		lm.SetTS(messageTime)
+		lm.SetMessage(message)
+		return
+	} else if ok {
+		lm.ToggleFalse()
+		lm.Reset()
+		lm.SetTS(messageTime)
+		lm.SetMessage(message)
+	} else if !ok {
+		lastMessageList[message.Author.ID] = new(lastMessage)
+	}
+
 	isPrefixed, trimmed := PrefixHandler(message)
 	if !isPrefixed {
 		return
