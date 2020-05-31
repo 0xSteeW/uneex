@@ -111,7 +111,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Client started")
 	ChangeStatus()
 	// Handle syscalls to quit bot gracefully and close database connection
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
@@ -142,8 +141,20 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 	messageTime := time.Now()
 
 	if lm, ok := lastMessageList[message.Author.ID]; ok && lm.CoolDown() {
-		if lm.LastWasSpam && lm.Count > spamLimit {
+		if lm.LastWasSpam && lm.Count >= spamLimit {
 			client.ChannelMessageSend(message.ChannelID, "Don't spam! "+message.Author.String())
+			warnings, err := databases.SafeQuery(`select spam_warnings from user where id=?`, message.Author.ID)
+			if err == nil {
+				warning := warnings[0]
+				intWarning, _ := strconv.Atoi(warning)
+				maxWarningsRaw := config.Config("MaxWarnings", "Default")
+				maxWarnings, _ := strconv.Atoi(maxWarningsRaw)
+				if intWarning >= maxWarnings {
+					client.ChannelMessageSend(message.ChannelID, "Muting user "+message.Author.String())
+				} else {
+					databases.SafeExec(`update user set spam_warnings=spam_warnings+1 where id=?`, message.Author.ID)
+				}
+			}
 			lm.Reset()
 			lm.ToggleFalse()
 		} else if lm.LastWasSpam && lm.Count < spamLimit && lm.Count > 0 {
@@ -162,6 +173,17 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 		lm.SetMessage(message)
 	} else if !ok {
 		lastMessageList[message.Author.ID] = new(lastMessage)
+		rows, err := databases.SafeQuery(`select * from user where id=?`, message.Author.ID)
+		if err != nil {
+			return
+		}
+		if len(rows) == 0 {
+			_, err := databases.SafeExec(`insert into user values(?,?,?)`, message.Author.ID, 0, "Default")
+			if err != nil {
+				return
+			}
+		}
+
 	}
 
 	isPrefixed, trimmed := PrefixHandler(message)
