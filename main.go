@@ -151,6 +151,11 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 				maxWarnings, _ := strconv.Atoi(maxWarningsRaw)
 				if intWarning >= maxWarnings {
 					client.ChannelMessageSend(message.ChannelID, "Muting user "+message.Author.String())
+					currentGuild, _ := client.Guild(message.GuildID)
+					muted := commands.Mute(message.Author, currentGuild)
+					if muted {
+						client.ChannelMessageSend(message.ChannelID, "Successfully muted user "+message.Author.String())
+					}
 				} else {
 					databases.SafeExec(`update user set spam_warnings=spam_warnings+1 where id=?`, message.Author.ID)
 				}

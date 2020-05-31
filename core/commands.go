@@ -38,6 +38,52 @@ func ThisShard(buffer *Buffer) {
 	buffer.Content = strconv.Itoa(shard.ShardID)
 }
 
+func Mute(user *discordgo.User, guild *discordgo.Guild) bool {
+	var mutedRole *discordgo.Role
+	for _, role := range guild.Roles {
+		if strings.ToLower(role.Name) == "uneexmuted" {
+			mutedRole = role
+		}
+	}
+	if mutedRole == nil {
+		role, err := Client.GuildRoleCreate(guild.ID)
+		if err != nil {
+			return false
+		}
+		mutedRole, err = Client.GuildRoleEdit(guild.ID, role.ID, "UneexMuted", 0, role.Hoist, 0, false)
+		if err != nil {
+			return false
+		}
+	}
+	err := Client.GuildMemberRoleAdd(guild.ID, user.ID, mutedRole.ID)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+func ManualMute(buffer *Buffer, content string) {
+	if !moderation.HasPermission("administrator", GetPermissionsInt()) {
+		buffer.Content = "You dont have permission for this."
+		return
+	}
+	content = RemoveCommand(content)
+	mentions := GetMentions(content)
+	var muteCount int
+	if len(mentions) == 0 {
+		buffer.Content = "You didn't specify any user to mute."
+		return
+	}
+	guild, _ := Client.Guild(Message.GuildID)
+	for _, user := range mentions {
+		muted := Mute(user, guild)
+		if muted {
+			muteCount += 1
+		}
+	}
+	buffer.Content = fmt.Sprintf("Successfully muted %d users out of %d", muteCount, len(mentions))
+}
+
 func Ping(buffer *Buffer) {
 	latency := Client.HeartbeatLatency()
 	var fields []*discordgo.MessageEmbedField
@@ -1081,6 +1127,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Info(buff, content)
 	case "cleanspam":
 		CleanSpam(buff, content)
+	case "mute":
+		ManualMute(buff, content)
 	case "cleanbulk":
 		Delete(buff, content)
 	case "serverinfo":
