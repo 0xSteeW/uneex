@@ -147,10 +147,8 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 			lm.Reset()
 			lm.ToggleFalse()
 		} else if lm.LastWasSpam && lm.Count < spamLimit && lm.Count > 0 {
-			fmt.Println("More spam count:", lm.Count)
 			lm.Up()
 		} else {
-			fmt.Println("First spam count")
 			lm.ToggleTrue()
 			lm.Up()
 		}
