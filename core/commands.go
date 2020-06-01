@@ -96,29 +96,40 @@ func MembersToUsers(members []*discordgo.Member) []*discordgo.User {
 	return userList
 }
 
-func (buff *Buffer) GetUsers() {
+func GetUsers(buff *Buffer) {
 	currentGuild, err := Client.Guild(Message.GuildID)
 	if err != nil {
 		return
 	}
 	buff.Users = MembersToUsers(currentGuild.Members)
+	buff.Content = "Successfully got users."
+}
+
+func ParseRegex(content string) (regex string) {
+	params := strings.Split(content, "`")
+	if len(params) < 3 {
+		return RemoveCommand(content)
+	}
+	regexSplit := params[1] // The one in the middle foo `bar` baz
+	return regexSplit
 }
 
 func FindUsers(buffer *Buffer, content string) {
-	expression := RemoveCommand(content)
-	findUserRegex := regexp.MustCompile(expression)
-	errorParse := recover()
-	if errorParse != nil {
-		buffer.Content = "Could not parse regex."
+	expression := ParseRegex(content)
+	findUserRegex, err := regexp.Compile(expression)
+	if err != nil {
+		buffer.Content = "Could not parse expression"
+		buffer.FlushUsers()
 		return
 	}
+
 	var foundUsers []*discordgo.User
 	for _, user := range buffer.Users {
 		if findUserRegex.MatchString(user.Username) {
 			foundUsers = append(foundUsers, user)
 		}
 	}
-	if foundUsers == nil {
+	if foundUsers != nil {
 		buffer.Users = foundUsers
 		buffer.Content = fmt.Sprintf("Found %d user(s)", len(foundUsers))
 	} else {
@@ -1199,7 +1210,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 	case "cat":
 		Cat(buff, content)
 	case "list", "userlist":
-		buff.GetUsers()
+		GetUsers(buff)
 	case "findusers", "find":
 		FindUsers(buff, content)
 	case "unemoji":
