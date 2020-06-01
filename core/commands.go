@@ -84,6 +84,50 @@ func ManualMute(buffer *Buffer, content string) {
 	buffer.Content = fmt.Sprintf("Successfully muted %d users out of %d", muteCount, len(mentions))
 }
 
+func MembersToUsers(members []*discordgo.Member) []*discordgo.User {
+	var userList []*discordgo.User
+	if members == nil {
+		return nil
+	}
+
+	for _, member := range members {
+		userList = append(userList, member.User)
+	}
+	return userList
+}
+
+func (buff *Buffer) GetUsers() {
+	currentGuild, err := Client.Guild(Message.GuildID)
+	if err != nil {
+		return
+	}
+	buff.Users = MembersToUsers(currentGuild.Members)
+}
+
+func FindUsers(buffer *Buffer, content string) {
+	expression := RemoveCommand(content)
+	findUserRegex := regexp.MustCompile(expression)
+	errorParse := recover()
+	if errorParse != nil {
+		buffer.Content = "Could not parse regex."
+		return
+	}
+	var foundUsers []*discordgo.User
+	for _, user := range buffer.Users {
+		if findUserRegex.MatchString(user.Username) {
+			foundUsers = append(foundUsers, user)
+		}
+	}
+	if foundUsers == nil {
+		buffer.Users = foundUsers
+		buffer.Content = fmt.Sprintf("Found %d user(s)", len(foundUsers))
+	} else {
+		buffer.Content = "No users found matching that criteria."
+		buffer.FlushUsers()
+		return
+	}
+}
+
 func Ping(buffer *Buffer) {
 	latency := Client.HeartbeatLatency()
 	var fields []*discordgo.MessageEmbedField
@@ -914,6 +958,7 @@ type Bufferable interface {
 type Buffer struct {
 	Content string
 	Files   map[string][]byte
+	Users   []*discordgo.User
 	Pipes   []string
 	Next    []string
 	Errors  int
@@ -921,6 +966,10 @@ type Buffer struct {
 
 func (buff *Buffer) FlushFiles() {
 	buff.Files = nil
+}
+
+func (buff *Buffer) FlushUsers() {
+	buff.Users = nil
 }
 
 func GetFileType(reader []byte) (rawtype string, extension string) {
@@ -1149,6 +1198,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Rotate(buff, content)
 	case "cat":
 		Cat(buff, content)
+	case "list", "userlist":
+		buff.GetUsers()
+	case "findusers", "find":
+		FindUsers(buff, content)
 	case "unemoji":
 		Unemoji(buff, content)
 	case "addemoji":

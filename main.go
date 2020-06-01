@@ -155,6 +155,7 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 					muted := commands.Mute(message.Author, currentGuild)
 					if muted {
 						client.ChannelMessageSend(message.ChannelID, "Successfully muted user "+message.Author.String())
+						databases.SafeExec(`update user set spam_warnings=0 where id=?`, message.Author.ID)
 					}
 				} else {
 					databases.SafeExec(`update user set spam_warnings=spam_warnings+1 where id=?`, message.Author.ID)
