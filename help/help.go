@@ -86,18 +86,24 @@ func TextEmbedFields() []*discordgo.MessageEmbedField {
 	rowSyntax := &discordgo.MessageEmbedField{Name: "Syntax", Value: "Syntax: &command1 | &command2"}
 	rowReverse := &discordgo.MessageEmbedField{Name: "reverse", Value: "Reverses current buffer string."}
 	rowUpper := &discordgo.MessageEmbedField{Name: "upper", Value: "Capitalises current buffer."}
-	return []*discordgo.MessageEmbedField{rowBold, rowCat, rowCron, rowDebug, rowEcho, rowFlush, rowGrab, rowHelp, rowItalic, rowLower, rowPing, rowPrint, rowReplace, rowReverse, rowShutdown, rowSyntax, rowUpper, rowWc}
+	rowB64Encode := &discordgo.MessageEmbedField{Name: "b64encode [Text]", Value: "Base64 encode string in buffer or provided one."}
+	rowB64Decode := &discordgo.MessageEmbedField{Name: "b64decode [Text]", Value: "Base64 decode string in buffer or provided one."}
+	return []*discordgo.MessageEmbedField{rowBold, rowCat, rowB64Encode, rowB64Decode, rowCron, rowDebug, rowEcho, rowFlush, rowGrab, rowHelp, rowItalic, rowLower, rowPing, rowPrint, rowReplace, rowReverse, rowShutdown, rowSyntax, rowUpper, rowWc}
 }
 
 func ModerationEmbedFields() []*discordgo.MessageEmbedField {
-	rowKick := &discordgo.MessageEmbedField{Name: "kick (IDS/Mentions) -r [Reason]", Value: "Kick one or multiple users. Mentions and ids are accepted. Use -r [reason] at the end to give a reason."}
-	rowBan := &discordgo.MessageEmbedField{Name: "ban (IDS/Mentions) -d (Days)", Value: "Ban one or multiple users. Mentions and ids are accepted. Use -d [days] to specify ban time."}
+	rowKick := &discordgo.MessageEmbedField{Name: "kick (IDS/Mentions) -r [Reason]", Value: "Kick one or multiple users. Mentions ,ids and users stored with &find or &list are accepted. Use -r [reason] at the end to give a reason."}
+	rowMute := &discordgo.MessageEmbedField{Name: "mute (IDs/Mentions)", Value: "Mute a user (work in progress)"}
+	rowList := &discordgo.MessageEmbedField{Name: "list", Value: "Get all users from the server and save them int the buffer."}
+	rowFind := &discordgo.MessageEmbedField{Name: "find `(Regex expression)`", Value: "Work with previous &list command and retrieve every user that matches the expression. Example: &list | &find `^[a-z]+`"}
+
+	rowBan := &discordgo.MessageEmbedField{Name: "ban (IDS/Mentions) -d (Days)", Value: "Ban one or multiple users. Mentions ,ids and users stored with &find or &list are accepted. Use -d [days] to specify ban time."}
 	rowCleanSpam := &discordgo.MessageEmbedField{Name: "cleanspam (Max)", Value: "Clean possible spam messages, with a maximum of 500."}
 	rowCleanBulk := &discordgo.MessageEmbedField{Name: "cleanbulk (Max)", Value: "Clean all previous messages, with a maximum of 100."}
 	rowServerInfo := &discordgo.MessageEmbedField{Name: "serverinfo", Value: "Provide some basic server information."}
-	rowNick := &discordgo.MessageEmbedField{Name: "nick (IDS/Mentions) -n (name)", Value: "Rename all mentioned users. To set the nickname use -n nickname at the end."}
+	rowNick := &discordgo.MessageEmbedField{Name: "nick [IDS/Mentions] -n (name)", Value: "Rename all mentioned users. It also works with users in buffer. To set the nickname use -n nickname at the end."}
 	rowInfo := &discordgo.MessageEmbedField{Name: "info [Mention]", Value: "Provide some information about mentioned user. Defaults to you if no mentions are provided."}
-	return []*discordgo.MessageEmbedField{rowBan, rowCleanBulk, rowCleanSpam, rowInfo, rowKick, rowNick, rowServerInfo}
+	return []*discordgo.MessageEmbedField{rowBan, rowCleanBulk, rowCleanSpam, rowMute, rowList, rowFind, rowInfo, rowKick, rowNick, rowServerInfo}
 }
 
 func ImageEmbedFields() []*discordgo.MessageEmbedField {
@@ -109,5 +115,6 @@ func ImageEmbedFields() []*discordgo.MessageEmbedField {
 	rowRotate := &discordgo.MessageEmbedField{Name: "rotate (Direction)", Value: "Rotate images on buffer. Valid directions: up, down, left, right."}
 	rowUnemoji := &discordgo.MessageEmbedField{Name: "unemoji [Emoji]", Value: "Get downloadable image of an emoji. It can also get emojis from copied messages. Pushes images to the buffer. Caution: This only works with custom emojis!"}
 	rowAddEmoji := &discordgo.MessageEmbedField{Name: "addemoji (Name)", Value: "Add images on buffer as emojis on the current server, with given name."}
-	return []*discordgo.MessageEmbedField{rowAddEmoji, rowAvatar, rowBlur, rowInvert, rowPrintFiles, rowRotate, rowServerIcon, rowUnemoji}
+	rowDeleteEmoji := &discordgo.MessageEmbedField{Name: "deleteemoji (Name)", Value: "Delete emoji with provided name."}
+	return []*discordgo.MessageEmbedField{rowAddEmoji, rowAvatar, rowBlur, rowInvert, rowDeleteEmoji, rowPrintFiles, rowRotate, rowServerIcon, rowUnemoji}
 }

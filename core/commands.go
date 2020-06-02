@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -102,6 +103,7 @@ func GetUsers(buff *Buffer) {
 		return
 	}
 	buff.Users = MembersToUsers(currentGuild.Members)
+	buff.False()
 	buff.Content = "Successfully got users."
 }
 
@@ -131,6 +133,7 @@ func FindUsers(buffer *Buffer, content string) {
 	}
 	if foundUsers != nil {
 		buffer.Users = foundUsers
+		buffer.True()
 		buffer.Content = fmt.Sprintf("Found %d user(s)", len(foundUsers))
 	} else {
 		buffer.Content = "No users found matching that criteria."
@@ -305,17 +308,30 @@ func FormatSliceToString(slice []string) string {
 
 func Kick(buffer *Buffer, content string) {
 	if moderation.HasPermission("kick", GetPermissionsInt()) {
-		params := strings.Split(RemoveCommand(content), "-r")
+		var mentions []*discordgo.User
+		params := strings.Split(content, "-r")
 		var reason string
 		var paramsLeft string
-		if len(params) < 2 {
+		if len(params) <= 1 {
 			buffer.Content = "No reason was provided, proceeding."
-			paramsLeft = RemoveCommand(content)
-		} else {
+			if buffer.Users != nil {
+				mentions = buffer.Users
+			} else {
+				paramsLeft = RemoveCommand(content)
+			}
+		} else if len(params) > 1 {
 			reason = params[1]
-			paramsLeft = params[0]
+			if buffer.Users != nil {
+				if !buffer.HasFilteredUsers {
+					buffer.Content = "Warning, you have selected all users. If you are sure about this use &find . to select all users instead."
+					return
+				}
+				mentions = buffer.Users
+			} else {
+				paramsLeft = params[0]
+				mentions = GetMentions(paramsLeft)
+			}
 		}
-		mentions := GetMentions(paramsLeft)
 		if len(mentions) > 0 {
 			var err error
 			for _, userToKick := range mentions {
@@ -492,41 +508,47 @@ func BulkDelete(buffer *Buffer, messages []*discordgo.Message) {
 // Ban
 func Ban(buffer *Buffer, content string) {
 	if moderation.HasPermission("ban", GetPermissionsInt()) {
-		params := strings.Split(RemoveCommand(content), "-r")
-		var reason string
+		var mentions []*discordgo.User
+		params := strings.Split(RemoveCommand(content), "-d")
+		var days string
 		var paramsLeft string
-		if len(params) < 2 {
-			buffer.Content = "No reason was provided, proceeding."
-			paramsLeft = RemoveCommand(content)
-		} else {
-			reason = params[1]
-			paramsLeft = params[0]
+		if len(params) <= 1 {
+			buffer.Content = "No days were provided"
+			return
+		} else if len(params) > 1 {
+			days = params[1]
+			if buffer.Users != nil {
+				if !buffer.HasFilteredUsers {
+					buffer.Content = "Warning, you have selected all users. If you are sure about this use &find . to selecat all users instead."
+					return
+				}
+				mentions = buffer.Users
+			} else {
+				paramsLeft = params[0]
+				mentions = GetMentions(paramsLeft)
+			}
 		}
-		days := strings.Split(content, "-d")
 		if len(days) == 0 {
 			buffer.Content = "No amount of days were provided"
 			return
 		}
-		daysInt, err := strconv.Atoi(strings.TrimSpace(days[1]))
+		daysInt, err := strconv.Atoi(strings.TrimSpace(days))
 		if err != nil || daysInt <= 0 {
 			buffer.Content = "Number of days were not valid."
 			return
 		}
-		mentions := GetMentions(paramsLeft)
+		var count int
 		if len(mentions) > 0 {
 			var err error
-			for _, userToKick := range Mentions {
-				if reason != "" {
-					err = Client.GuildBanCreateWithReason(Message.GuildID, userToKick.ID, reason, daysInt)
+			for _, userToKick := range mentions {
+				err = Client.GuildBanCreate(Message.GuildID, userToKick.ID, daysInt)
+				if err == nil {
+					count += 1
 				} else {
-					err = Client.GuildBanCreate(Message.GuildID, userToKick.ID, daysInt)
+					log.Println(err)
 				}
 			}
-			if err != nil {
-				buffer.Content = "One or more users could not be banned."
-			} else {
-				buffer.Content = "Successfully banned all users."
-			}
+			buffer.Content = fmt.Sprint("Successfully banned ", count, "/", len(mentions), " users")
 		} else {
 			buffer.Content = "You didn't provide any user."
 		}
@@ -892,14 +914,28 @@ func Avatar(buffer *Buffer, content string) {
 }
 
 func Nick(buffer *Buffer, content string) {
+	if !moderation.HasPermission("manageNicknames", GetPermissionsInt()) {
+		buffer.Content = "You don't have permission for that."
+		return
+	}
 	content = RemoveCommand(content)
 	params := strings.Split(content, "-n")
-	if len(params) <= 1 {
+	var mentions []*discordgo.User
+	if len(params) == 0 {
 		buffer.Content = "Nickname or mentions not provided."
 		return
 	}
+	if buffer.Users != nil {
+		if !buffer.HasFilteredUsers {
+			buffer.Content = "Warning, you have selected all users. If you are sure about this use &find . to select all users instead."
+			return
+		}
+		mentions = buffer.Users
+	} else {
+		mentions = GetMentions(content)
+	}
+
 	nick := strings.TrimSpace(params[1])
-	mentions := GetMentions(content)
 	var err error
 	var count int
 	total := len(mentions)
@@ -914,6 +950,10 @@ func Nick(buffer *Buffer, content string) {
 		return
 	}
 	buffer.Content = "Successfully renamed " + strconv.Itoa(count) + "/" + strconv.Itoa(total) + " mentioned users to: " + nick
+}
+
+func Maincra() {
+	Client.ChannelMessageSend(Message.ChannelID, "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fi.ytimg.com%2Fvi%2FbqZYSgc0sUo%2Fhqdefault.jpg&f=1&nofb=1")
 }
 
 func ServerIcon(buffer *Buffer) {
@@ -970,9 +1010,19 @@ type Buffer struct {
 	Content string
 	Files   map[string][]byte
 	Users   []*discordgo.User
-	Pipes   []string
-	Next    []string
-	Errors  int
+	// Check if userlist is just from getting &list, and warn the user
+	HasFilteredUsers bool
+	Pipes            []string
+	Next             []string
+	Errors           int
+}
+
+func (buff *Buffer) False() {
+	buff.HasFilteredUsers = false
+}
+
+func (buff *Buffer) True() {
+	buff.HasFilteredUsers = true
 }
 
 func (buff *Buffer) FlushFiles() {
@@ -1215,6 +1265,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		FindUsers(buff, content)
 	case "unemoji":
 		Unemoji(buff, content)
+	case "maincra":
+		Maincra()
 	case "addemoji":
 		AddEmoji(buff, content)
 	case "deleteemoji":
