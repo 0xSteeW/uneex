@@ -278,10 +278,6 @@ func Print(buffer *Buffer) {
 
 // Moderation
 func GetPermissionsInt() int {
-	guild, _ := Client.Guild(Message.GuildID)
-	if guild.OwnerID == Message.Author.ID {
-		return 0x8
-	}
 	perms, err := Client.State.UserChannelPermissions(Message.Author.ID, Message.ChannelID)
 	if err != nil {
 		return 0

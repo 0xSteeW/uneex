@@ -43,7 +43,7 @@ var Permissions = map[string]int{
 func HasPermission(name string, permissionsInt int) bool {
 	if permissionsInt&Permissions[name] == Permissions[name] {
 		return true
-	} else if permissionsInt&Permissions["administator"] == Permissions["administrator"] {
+	} else if permissionsInt&Permissions["administrator"] == Permissions["administrator"] {
 		return true
 	}
 	return false
