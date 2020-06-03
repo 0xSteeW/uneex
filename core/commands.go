@@ -85,8 +85,46 @@ func ManualMute(buffer *Buffer, content string) {
 	buffer.Content = fmt.Sprintf("Successfully muted %d users out of %d", muteCount, len(mentions))
 }
 
-func AddRole(buff *Buffer, content string) {
+func AddRole(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	params := strings.Split(content, "-r")
+	if len(params) <= 1 {
+		buffer.Content = "No role was provided."
+		return
+	}
+	mentions := GetMentions(buffer, params[0])
+	roles := GetRoles(params[1])
+	var count int
+	for _, user := range mentions {
+		for _, role := range roles {
+			err := Client.GuildMemberRoleAdd(Message.GuildID, user.ID, role.ID)
+			if err == nil {
+				count += 1
+			}
+		}
+	}
+	buffer.Content = fmt.Sprintf("Added %d roles to %d users.", len(roles), len(mentions))
+}
 
+func DeleteRole(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	params := strings.Split(content, "-r")
+	if len(params) <= 1 {
+		buffer.Content = "No role was provided."
+		return
+	}
+	mentions := GetMentions(buffer, params[0])
+	roles := GetRoles(params[1])
+	var count int
+	for _, user := range mentions {
+		for _, role := range roles {
+			err := Client.GuildMemberRoleAdd(Message.GuildID, user.ID, role.ID)
+			if err == nil {
+				count += 1
+			}
+		}
+	}
+	buffer.Content = fmt.Sprintf("Added %d roles to %d users.", len(roles), len(mentions))
 }
 
 func MembersToUsers(members []*discordgo.Member) []*discordgo.User {
@@ -205,6 +243,26 @@ func Base64Encode(buffer *Buffer, content string) {
 		base = content
 	}
 	buffer.Content = base64.StdEncoding.EncodeToString([]byte(base))
+}
+
+func GetRoles(content string) []*discordgo.Role {
+	roles := strings.Split(content, " ")
+	guild, _ := Client.Guild(Message.GuildID)
+	guildRoles := guild.Roles
+	var finalRoles []*discordgo.Role
+	roleRegex, _ := regexp.Compile(`<@&[0-9]{18}>`)
+	for _, role := range roles {
+		role = strings.TrimSpace(role)
+		if roleRegex.MatchString(role) {
+			roleID := role[3 : len(role)-1]
+			for _, guildRole := range guildRoles {
+				if guildRole.ID == roleID {
+					finalRoles = append(finalRoles, guildRole)
+				}
+			}
+		}
+	}
+	return finalRoles
 }
 
 func GetMentions(buffer *Buffer, content string) []*discordgo.User {
