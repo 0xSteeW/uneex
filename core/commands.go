@@ -85,6 +85,10 @@ func ManualMute(buffer *Buffer, content string) {
 	buffer.Content = fmt.Sprintf("Successfully muted %d users out of %d", muteCount, len(mentions))
 }
 
+func AddRole(buff *Buffer, content string) {
+
+}
+
 func MembersToUsers(members []*discordgo.Member) []*discordgo.User {
 	var userList []*discordgo.User
 	if members == nil {
@@ -915,6 +919,7 @@ func Nick(buffer *Buffer, content string) {
 	var err error
 	var count int
 	total := len(mentions)
+	Client.ChannelTyping(Message.ChannelID)
 	for _, user := range mentions {
 		if nick == "RESET" {
 			err = Client.GuildMemberNickname(Message.GuildID, user.ID, user.Username)
@@ -927,10 +932,6 @@ func Nick(buffer *Buffer, content string) {
 				count += 1
 			}
 		}
-	}
-	if err != nil {
-		buffer.Content = "Some users could not be nicknamed."
-		return
 	}
 	buffer.Content = "Successfully renamed " + strconv.Itoa(count) + "/" + strconv.Itoa(total) + " mentioned users to: " + nick
 }
@@ -1230,6 +1231,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Blur(buff, content)
 	case "nick":
 		Nick(buff, content)
+	case "addrole":
+		AddRole(buff, content)
 	case "invert":
 		Invert(buff)
 	case "b64encode":
