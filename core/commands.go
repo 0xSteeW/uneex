@@ -278,7 +278,11 @@ func Print(buffer *Buffer) {
 
 // Moderation
 func GetPermissionsInt() int {
-	perms, err := Client.UserChannelPermissions(Message.Author.ID, Message.ChannelID)
+	guild, _ := Client.Guild(Message.GuildID)
+	if guild.OwnerID == Message.Author.ID {
+		return 0x8
+	}
+	perms, err := Client.State.UserChannelPermissions(Message.Author.ID, Message.ChannelID)
 	if err != nil {
 		return 0
 	}
@@ -905,7 +909,7 @@ func Nick(buffer *Buffer, content string) {
 	content = RemoveCommand(content)
 	params := strings.Split(content, "-n")
 	var mentions []*discordgo.User
-	if len(params) == 0 {
+	if len(params) <= 1 {
 		buffer.Content = "Nickname or mentions not provided."
 		return
 	}

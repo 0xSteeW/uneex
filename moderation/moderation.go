@@ -12,7 +12,7 @@ var Permissions = map[string]int{
 	"ban":             0x4,
 	"invite":          0x1,
 	"nickname":        0x4000000,
-	"manageNicknames": 0x8000000,
+	"manageNicknames": 0x08000000,
 	"manageEmojis":    0x40000000,
 	"manageWebhooks":  0x20000000,
 
