@@ -69,7 +69,7 @@ func ManualMute(buffer *Buffer, content string) {
 		return
 	}
 	content = RemoveCommand(content)
-	mentions := GetMentions(content)
+	mentions := GetMentions(buffer, content)
 	var muteCount int
 	if len(mentions) == 0 {
 		buffer.Content = "You didn't specify any user to mute."
@@ -117,6 +117,7 @@ func ParseRegex(content string) (regex string) {
 }
 
 func FindUsers(buffer *Buffer, content string) {
+	GetUsers(buffer)
 	expression := ParseRegex(content)
 	findUserRegex, err := regexp.Compile(expression)
 	if err != nil {
@@ -202,7 +203,15 @@ func Base64Encode(buffer *Buffer, content string) {
 	buffer.Content = base64.StdEncoding.EncodeToString([]byte(base))
 }
 
-func GetMentions(content string) []*discordgo.User {
+func GetMentions(buffer *Buffer, content string) []*discordgo.User {
+	if buffer.Users != nil {
+		if !buffer.HasFilteredUsers {
+			buffer.Content = "Warning, you have selected all users. If you are really sure you want to select all do &find `.` instead."
+			buffer.FlushUsers()
+			return nil
+		}
+		return buffer.Users
+	}
 	var userList []*discordgo.User
 	detectMention := regexp.MustCompile(`<@![0-9]{18}>`)
 	params := strings.Split(content, " ")
@@ -311,27 +320,13 @@ func Kick(buffer *Buffer, content string) {
 		var mentions []*discordgo.User
 		params := strings.Split(content, "-r")
 		var reason string
-		var paramsLeft string
 		if len(params) <= 1 {
 			buffer.Content = "No reason was provided, proceeding."
-			if buffer.Users != nil {
-				mentions = buffer.Users
-			} else {
-				paramsLeft = RemoveCommand(content)
-			}
 		} else if len(params) > 1 {
-			reason = params[1]
-			if buffer.Users != nil {
-				if !buffer.HasFilteredUsers {
-					buffer.Content = "Warning, you have selected all users. If you are sure about this use &find . to select all users instead."
-					return
-				}
-				mentions = buffer.Users
-			} else {
-				paramsLeft = params[0]
-				mentions = GetMentions(paramsLeft)
-			}
+			reason = strings.TrimSpace(params[1])
 		}
+		mentions = GetMentions(buffer, content)
+		var count int
 		if len(mentions) > 0 {
 			var err error
 			for _, userToKick := range mentions {
@@ -340,12 +335,11 @@ func Kick(buffer *Buffer, content string) {
 				} else {
 					err = Client.GuildMemberDelete(Message.GuildID, userToKick.ID)
 				}
+				if err == nil {
+					count += 1
+				}
 			}
-			if err != nil {
-				buffer.Content = "One or more users could not be kicked."
-			} else {
-				buffer.Content = "Successfully kicked all users."
-			}
+			buffer.Content = fmt.Sprint("Successfully kicked", count, "/", len(mentions), " users")
 		} else {
 			buffer.Content = "You didn't provide any user."
 		}
@@ -511,23 +505,13 @@ func Ban(buffer *Buffer, content string) {
 		var mentions []*discordgo.User
 		params := strings.Split(RemoveCommand(content), "-d")
 		var days string
-		var paramsLeft string
 		if len(params) <= 1 {
 			buffer.Content = "No days were provided"
 			return
 		} else if len(params) > 1 {
 			days = params[1]
-			if buffer.Users != nil {
-				if !buffer.HasFilteredUsers {
-					buffer.Content = "Warning, you have selected all users. If you are sure about this use &find . to selecat all users instead."
-					return
-				}
-				mentions = buffer.Users
-			} else {
-				paramsLeft = params[0]
-				mentions = GetMentions(paramsLeft)
-			}
 		}
+		mentions = GetMentions(buffer, content)
 		if len(days) == 0 {
 			buffer.Content = "No amount of days were provided"
 			return
@@ -567,7 +551,7 @@ func Info(buffer *Buffer, content string) {
 	if RemoveCommand(content) == "" {
 		user = Message.Author
 	} else {
-		user = GetMentions(RemoveCommand(content))[0]
+		user = GetMentions(buffer, RemoveCommand(content))[0]
 	}
 	userField := &discordgo.MessageEmbedField{Name: "User", Value: user.String(), Inline: true}
 	guild, err := Client.Guild(Message.GuildID)
@@ -900,7 +884,7 @@ func Avatar(buffer *Buffer, content string) {
 	var avatarFile []byte
 	var name string
 	var extension string
-	mention := GetMentions(content)
+	mention := GetMentions(buffer, content)
 	if len(mention) == 0 {
 		avatarFile = DownloadToBytes(Message.Author.AvatarURL(""))
 		_, extension = GetFileType(avatarFile)
@@ -925,24 +909,23 @@ func Nick(buffer *Buffer, content string) {
 		buffer.Content = "Nickname or mentions not provided."
 		return
 	}
-	if buffer.Users != nil {
-		if !buffer.HasFilteredUsers {
-			buffer.Content = "Warning, you have selected all users. If you are sure about this use &find . to select all users instead."
-			return
-		}
-		mentions = buffer.Users
-	} else {
-		mentions = GetMentions(content)
-	}
+	mentions = GetMentions(buffer, content)
 
 	nick := strings.TrimSpace(params[1])
 	var err error
 	var count int
 	total := len(mentions)
 	for _, user := range mentions {
-		err = Client.GuildMemberNickname(Message.GuildID, user.ID, nick)
-		if err == nil {
-			count += 1
+		if nick == "RESET" {
+			err = Client.GuildMemberNickname(Message.GuildID, user.ID, user.Username)
+			if err == nil {
+				count += 1
+			}
+		} else {
+			err = Client.GuildMemberNickname(Message.GuildID, user.ID, nick)
+			if err == nil {
+				count += 1
+			}
 		}
 	}
 	if err != nil {
