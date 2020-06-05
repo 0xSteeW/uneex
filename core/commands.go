@@ -166,11 +166,13 @@ func ManualMute(buffer *Buffer, content string) {
 func Poll(buffer *Buffer, content string) {
 	pollEmbed := &discordgo.MessageEmbed{}
 	var pollChannel *discordgo.Channel
+	var emojis []string
 	content = RemoveCommand(content)
 	_, flags := ParseFlags(content)
 	flagName := []string{"name", "n", "title", "t"}
 	flagDesc := []string{"desc", "d", "description", "content", "poll"}
 	flagChannel := []string{"c", "ch", "chan", "channel"}
+	flagEmojis := []string{"emojis", "reactions", "e", "emoji"}
 	if name, ok := multipleCommaOK(flags, flagName); ok {
 		if len(name) == 0 {
 			buffer.Content = "Please provide a valid name for the poll."
@@ -199,6 +201,10 @@ func Poll(buffer *Buffer, content string) {
 		}
 
 	}
+	if emojisRaw, ok := multipleCommaOK(flags, flagEmojis); ok {
+		// emoji = GetEmojis(FormatSliceToString(emojisRaw))
+		emojis = GetEmojis(FormatSliceToString(emojisRaw))
+	}
 	if pollChannel == nil {
 		pollChannel = GetChannel(Message.ChannelID)
 	}
@@ -207,13 +213,24 @@ func Poll(buffer *Buffer, content string) {
 		buffer.Content = "Could not create poll."
 		return
 	}
-	err1 := Client.MessageReactionAdd(embedToReact.ChannelID, embedToReact.ID, "👍")
-	err2 := Client.MessageReactionAdd(embedToReact.ChannelID, embedToReact.ID, "👎")
-	if err1 != nil || err2 != nil {
-		buffer.Content = "Could not react to the poll."
-		log.Println(err1, err2)
-		return
+	for _, emoji := range emojis {
+		Client.MessageReactionAdd(pollChannel.ID, embedToReact.ID, emoji)
 	}
+	if len(emojis) == 0 {
+		Client.MessageReactionAdd(pollChannel.ID, embedToReact.ID, "👍")
+		Client.MessageReactionAdd(pollChannel.ID, embedToReact.ID, "👎")
+	}
+
+}
+
+func GetEmojis(emoji string) []string {
+	var emojis []string
+	emojiRegex := regexp.MustCompile(`.+:[0-9]{18}>$`)
+	for _, emoji := range strings.Split(emoji, " ") {
+		emojiCode := emojiRegex.FindString(emoji)
+		emojis = append(emojis, emojiCode[0:len(emojiCode)-1])
+	}
+	return emojis
 
 }
 
@@ -542,7 +559,7 @@ func FormatSliceToString(slice []string) string {
 	}
 	var final string
 	for _, el := range slice {
-		final = final + el
+		final = final + el + " "
 	}
 	return strings.TrimSpace(final)
 }
