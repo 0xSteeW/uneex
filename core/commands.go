@@ -112,15 +112,6 @@ func ParseFlags(content string) ([]string, map[string][]string) {
 
 }
 
-func TestParse(buffer *Buffer, content string) {
-	content = RemoveCommand(content)
-	optional, flagMap := ParseFlags(content)
-	Client.ChannelMessageSend(Message.ChannelID, fmt.Sprintf("Optional arguments:%v", optional))
-	for a, b := range flagMap {
-		Client.ChannelMessageSend(Message.ChannelID, fmt.Sprintf("%s:%v", a, b))
-	}
-}
-
 //////
 //////
 //////
@@ -467,14 +458,18 @@ func FormatSliceToString(slice []string) string {
 func Kick(buffer *Buffer, content string) {
 	if moderation.HasPermission("kick", GetPermissionsInt()) {
 		var mentions []*discordgo.User
-		params := strings.Split(content, "-r")
-		var reason string
-		if len(params) <= 1 {
-			buffer.Content = "No reason was provided, proceeding."
-		} else if len(params) > 1 {
-			reason = strings.TrimSpace(params[1])
+		content = RemoveCommand(content)
+		users, flags := ParseFlags(content)
+		mentions = GetMentions(buffer, FormatSliceToString(users))
+		if mentions == nil {
+			buffer.Content = "No users provided."
+			return
 		}
-		mentions = GetMentions(buffer, content)
+		var reason string
+		reasonFlags := []string{"r", "reason"}
+		if reasonContent, ok := multipleCommaOK(flags, reasonFlags); ok {
+			reason = FormatSliceToString(reasonContent)
+		}
 		var count int
 		if len(mentions) > 0 {
 			var err error
@@ -652,36 +647,49 @@ func BulkDelete(buffer *Buffer, messages []*discordgo.Message) {
 func Ban(buffer *Buffer, content string) {
 	if moderation.HasPermission("ban", GetPermissionsInt()) {
 		var mentions []*discordgo.User
-		params := strings.Split(RemoveCommand(content), "-d")
-		var days string
-		if len(params) <= 1 {
-			buffer.Content = "No days were provided"
-			return
-		} else if len(params) > 1 {
-			days = params[1]
-		}
-		mentions = GetMentions(buffer, content)
-		if len(days) == 0 {
-			buffer.Content = "No amount of days were provided"
+		content = RemoveCommand(content)
+		users, flags := ParseFlags(content)
+		mentions = GetMentions(buffer, FormatSliceToString(users))
+		if mentions == nil {
+			buffer.Content = "No users provided."
 			return
 		}
-		daysInt, err := strconv.Atoi(strings.TrimSpace(days))
-		if err != nil || daysInt <= 0 {
-			buffer.Content = "Number of days were not valid."
-			return
+		var days int
+		var reason string
+		dayFlags := []string{"d", "days", "day", "time"}
+		if dayCount, ok := multipleCommaOK(flags, dayFlags); ok {
+			rawDays, err := strconv.Atoi(dayCount[0])
+			if err != nil {
+				buffer.Content = "Provided days were not valid."
+				return
+			}
+			days = rawDays
+		}
+		reasonFlags := []string{"r", "reason", "banreason"}
+		if reasonContent, ok := multipleCommaOK(flags, reasonFlags); ok {
+			reason = FormatSliceToString(reasonContent)
 		}
 		var count int
 		if len(mentions) > 0 {
 			var err error
 			for _, userToKick := range mentions {
-				err = Client.GuildBanCreate(Message.GuildID, userToKick.ID, daysInt)
-				if err == nil {
-					count += 1
+				if reason != "" {
+					err = Client.GuildBanCreateWithReason(Message.GuildID, userToKick.ID, reason, days)
+					if err == nil {
+						count += 1
+					} else {
+						log.Println(err)
+					}
 				} else {
-					log.Println(err)
+					err = Client.GuildBanCreate(Message.GuildID, userToKick.ID, days)
+					if err == nil {
+						count += 1
+					} else {
+						log.Println(err)
+					}
 				}
 			}
-			buffer.Content = fmt.Sprint("Successfully banned ", count, "/", len(mentions), " users")
+			buffer.Content = fmt.Sprint("Successfully banned ", count, "/", len(mentions), " users with reason: ", reason, " for ", days, " days.")
 		} else {
 			buffer.Content = "You didn't provide any user."
 		}
@@ -1046,21 +1054,37 @@ func Avatar(buffer *Buffer, content string) {
 	buffer.AddFile(name, avatarFile)
 }
 
+func multipleCommaOK(flags map[string][]string, flagsToCheck []string) ([]string, bool) {
+	for _, flag := range flagsToCheck {
+		flag = strings.ToLower(flag)
+		if val, ok := flags[flag]; ok {
+			return val, ok
+		}
+	}
+	return nil, false
+}
+
 func Nick(buffer *Buffer, content string) {
 	if !moderation.HasPermission("manageNicknames", GetPermissionsInt()) {
 		buffer.Content = "You don't have permission for that."
 		return
 	}
 	content = RemoveCommand(content)
-	params := strings.Split(content, "-n")
-	var mentions []*discordgo.User
-	if len(params) <= 1 {
-		buffer.Content = "Nickname or mentions not provided."
+	users, nickFlag := ParseFlags(content)
+	mentions := GetMentions(buffer, FormatSliceToString(users))
+	if mentions == nil {
+		buffer.Content = "No user was provided."
 		return
 	}
-	mentions = GetMentions(buffer, content)
-
-	nick := strings.TrimSpace(params[1])
+	var nick string
+	possibleFlags := []string{"n", "nick", "name", "nickname"}
+	if nickName, ok := multipleCommaOK(nickFlag, possibleFlags); ok {
+		nick = nickName[0]
+	}
+	if nick == "" {
+		buffer.Content = "Invalid nickname."
+		return
+	}
 	var err error
 	var count int
 	total := len(mentions)
@@ -1374,8 +1398,6 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		ServerInfo(buff)
 	case "blur":
 		Blur(buff, content)
-	case "testflags":
-		TestParse(buff, content)
 	case "nick":
 		Nick(buff, content)
 	case "addrole":
