@@ -39,6 +39,93 @@ func ThisShard(buffer *Buffer) {
 	buffer.Content = strconv.Itoa(shard.ShardID)
 }
 
+//////
+//////
+//////
+//////
+
+// Flag parser
+//
+func removeFlagHyphen(flag string) string {
+	return strings.Replace(flag, strings.Repeat("-", isLarge(flag)), "", 1)
+}
+
+func isLarge(flag string) int {
+	var count int
+	flag = strings.TrimSpace(flag)
+	for _, char := range flag {
+		if char != '-' {
+			return count
+		} else {
+			count += 1
+		}
+	}
+	return count
+}
+
+func ParseFlags(content string) ([]string, map[string][]string) {
+	flags := make(map[string][]string)
+	var optionalArgs []string
+	// Divide content in spaces.
+	separated := strings.Split(content, " ")
+	// Parse optional content (strings before any flag)
+	isFlag := regexp.MustCompile(`^[-]+`)
+	for _, optional := range separated {
+		if !isFlag.MatchString(optional) {
+			optionalArgs = append(optionalArgs, optional)
+		} else {
+			break
+		}
+	}
+	// Now parse the rest of flags
+	var dropOptionalArgs []string
+	dropOptionalArgs = separated[len(optionalArgs):]
+	var currentFlagArgs []string
+	var currentFlag string
+	// Work with the rest of flags
+	// Example --flag-1 test -f2 test 2
+	if len(dropOptionalArgs) == 0 {
+		return optionalArgs, nil
+	}
+
+	currentFlag = dropOptionalArgs[0]
+	currentFlag = removeFlagHyphen(currentFlag)
+	// Drop first flag as it has already been used
+	dropOptionalArgs = dropOptionalArgs[0:]
+
+	for index, section := range dropOptionalArgs {
+		// Iterating through parameters.
+		// Check for double - to see if flag is long version
+		if !isFlag.MatchString(section) {
+			currentFlagArgs = append(currentFlagArgs, section)
+			if index == len(dropOptionalArgs)-1 {
+				flags[currentFlag] = currentFlagArgs
+			}
+		} else {
+			flags[currentFlag] = currentFlagArgs
+			currentFlagArgs = nil
+			currentFlag = removeFlagHyphen(section)
+		}
+
+	}
+	return optionalArgs, flags
+
+}
+
+func TestParse(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	optional, flagMap := ParseFlags(content)
+	Client.ChannelMessageSend(Message.ChannelID, fmt.Sprintf("Optional arguments:%v", optional))
+	for a, b := range flagMap {
+		Client.ChannelMessageSend(Message.ChannelID, fmt.Sprintf("%s:%v", a, b))
+	}
+}
+
+//////
+//////
+//////
+//////
+
 func Mute(user *discordgo.User, guild *discordgo.Guild) bool {
 	var mutedRole *discordgo.Role
 	for _, role := range guild.Roles {
@@ -1287,6 +1374,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		ServerInfo(buff)
 	case "blur":
 		Blur(buff, content)
+	case "testflags":
+		TestParse(buff, content)
 	case "nick":
 		Nick(buff, content)
 	case "addrole":

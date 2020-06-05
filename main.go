@@ -192,6 +192,11 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 
 	}
 
+	if strings.HasPrefix(message.Content, fmt.Sprintf("<@!%s>", client.State.User.ID)) {
+		client.ChannelMessageSend(message.ChannelID, "Hello! My prefix is &. Use &help to get some help.")
+		return
+	}
+
 	isPrefixed, trimmed := PrefixHandler(message)
 	if !isPrefixed {
 		return
