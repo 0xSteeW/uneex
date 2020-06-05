@@ -163,138 +163,46 @@ func ManualMute(buffer *Buffer, content string) {
 	buffer.Content = fmt.Sprintf("Successfully muted %d users out of %d", muteCount, len(mentions))
 }
 
-func Poll(buffer *Buffer, content string) {
-	pollEmbed := &discordgo.MessageEmbed{}
-	var pollChannel *discordgo.Channel
+func AddRole(buffer *Buffer, content string) {
 	content = RemoveCommand(content)
-	_, flags := ParseFlags(content)
-	flagName := []string{"name", "n", "title", "t"}
-	flagDesc := []string{"desc", "d", "description", "content", "poll"}
-	flagChannel := []string{"c", "ch", "chan", "channel"}
-	if name, ok := multipleCommaOK(flags, flagName); ok {
-		if len(name) == 0 {
-			buffer.Content = "Please provide a valid name for the poll."
-			return
+	params := strings.Split(content, "-r")
+	if len(params) <= 1 {
+		buffer.Content = "No role was provided."
+		return
+	}
+	mentions := GetMentions(buffer, params[0])
+	roles := GetRoles(params[1])
+	var count int
+	for _, user := range mentions {
+		for _, role := range roles {
+			err := Client.GuildMemberRoleAdd(Message.GuildID, user.ID, role.ID)
+			if err == nil {
+				count += 1
+			}
 		}
-		pollEmbed.Title = FormatSliceToString(name)
-	} else {
-		buffer.Content = "No title has been provided for the poll."
-		return
 	}
-	if description, ok := multipleCommaOK(flags, flagDesc); ok {
-		if len(description) == 0 {
-			buffer.Content = "Please provide a valid description for the poll."
-			return
-		}
-		pollEmbed.Description = FormatSliceToString(description)
-	} else {
-		buffer.Content = "No description has been provided for the poll."
-		return
-	}
-	if channelID, ok := multipleCommaOK(flags, flagChannel); ok {
-		if len(channelID) == 0 {
-			pollChannel = GetChannel(Message.ChannelID)
-		} else {
-			pollChannel = GetChannel(channelID[0])
-		}
-
-	}
-	if pollChannel == nil {
-		pollChannel = GetChannel(Message.ChannelID)
-	}
-	embedToReact, err := Client.ChannelMessageSendEmbed(pollChannel.ID, pollEmbed)
-	if err != nil || embedToReact == nil {
-		buffer.Content = "Could not create poll."
-		return
-	}
-	err1 := Client.MessageReactionAdd(embedToReact.ChannelID, embedToReact.ID, "👍")
-	err2 := Client.MessageReactionAdd(embedToReact.ChannelID, embedToReact.ID, "👎")
-	if err1 != nil || err2 != nil {
-		buffer.Content = "Could not react to the poll."
-		log.Println(err1, err2)
-		return
-	}
-
+	buffer.Content = fmt.Sprintf("Added %d roles to %d users.", len(roles), len(mentions))
 }
 
-func GetChannel(content string) *discordgo.Channel {
-	params := strings.Split(content, " ")
-	var channelFound *discordgo.Channel
-	channelRegex := regexp.MustCompile(`<#[0-9]{18}>`)
-	channelIDRegex := regexp.MustCompile(`[0-9]{18}`)
-	for _, channel := range params {
-		if channelRegex.MatchString(channel) {
-			channelVerified, err := Client.Channel(channel[2 : len(channel)-1])
-			if err == nil {
-				channelFound = channelVerified
-			}
-		} else if channelIDRegex.MatchString(channel) {
-			channelVerified, err := Client.Channel(channel)
-			if err == nil {
-				channelFound = channelVerified
-			}
-		}
-	}
-	return channelFound
-
-}
-
-func Roles(buffer *Buffer, content string) {
-	if !moderation.HasPermission("manageRoles", GetPermissionsInt()) {
-		buffer.Content = "Sorry, you don't have permission to do this."
-		return
-	}
+func DeleteRole(buffer *Buffer, content string) {
 	content = RemoveCommand(content)
-	users, flags := ParseFlags(content)
-	mentions := GetMentions(buffer, FormatSliceToString(users))
-	if len(mentions) == 0 {
-		buffer.Content = "No valid user provided."
+	params := strings.Split(content, "-r")
+	if len(params) <= 1 {
+		buffer.Content = "No role was provided."
 		return
 	}
-	roleAddFlags := []string{"a", "addroles", "addrole", "add"}
-	roleDeleteFlags := []string{"r", "d", "del", "remove", "delete", "remove-roles"}
-	if roleArray, ok := multipleCommaOK(flags, roleAddFlags); ok {
-		if len(roleArray) == 0 {
-			buffer.Content = "No role has been provided"
-			return
-		}
-		roles := GetRoles(FormatSliceToString(roleArray))
-		if len(roles) == 0 {
-			buffer.Content = "No valid roles have been provided."
-			return
-		}
-		var count int
-		for _, user := range mentions {
-			for _, role := range roles {
-				err := Client.GuildMemberRoleAdd(Message.GuildID, user.ID, role.ID)
-				if err == nil {
-					count += 1
-				}
+	mentions := GetMentions(buffer, params[0])
+	roles := GetRoles(params[1])
+	var count int
+	for _, user := range mentions {
+		for _, role := range roles {
+			err := Client.GuildMemberRoleAdd(Message.GuildID, user.ID, role.ID)
+			if err == nil {
+				count += 1
 			}
 		}
-		buffer.Content = fmt.Sprintf("Added %d roles to %d users.", len(roles), len(mentions))
-	} else if roleArray, ok := multipleCommaOK(flags, roleDeleteFlags); ok {
-		if len(roleArray) == 0 {
-			buffer.Content = "No role has been provided."
-			return
-		}
-		roles := GetRoles(FormatSliceToString(roleArray))
-		if len(roles) == 0 {
-			buffer.Content = "No valid roles have been provided."
-			return
-		}
-		var count int
-		for _, user := range mentions {
-			for _, role := range roles {
-				err := Client.GuildMemberRoleRemove(Message.GuildID, user.ID, role.ID)
-				if err == nil {
-					count += 1
-				}
-			}
-		}
-		buffer.Content = fmt.Sprintf("Removed %d roles from %d users.", len(roles), len(mentions))
 	}
-
+	buffer.Content = fmt.Sprintf("Added %d roles to %d users.", len(roles), len(mentions))
 }
 
 func MembersToUsers(members []*discordgo.Member) []*discordgo.User {
@@ -900,7 +808,7 @@ func Emoji(buffer *Buffer, content string) {
 	removeFlags := []string{"r", "remove", "d", "delete", "del"}
 	addFlags := []string{"a", "add", "addemoji", "new", "add-emoji", "create", "c", "n"}
 	if _, ok := multipleCommaOK(flags, removeFlags); ok {
-		if len(name) == 0 {
+		if name[0] == "" {
 			buffer.Content = "No name was specified."
 			return
 		}
@@ -927,10 +835,6 @@ func Emoji(buffer *Buffer, content string) {
 			buffer.Content = "No files on buffer."
 			return
 		}
-		if len(name) == 0 {
-			buffer.Content = "No name was specified."
-			return
-		}
 
 		// Section for addEmoji
 		for _, img := range buffer.Files {
@@ -939,7 +843,7 @@ func Emoji(buffer *Buffer, content string) {
 				fullTypeToEncode := http.DetectContentType(img)
 				base64image := base64.StdEncoding.EncodeToString(img)
 				dataURI := fmt.Sprintf(`data:%s;base64,%s`, fullTypeToEncode, base64image)
-				_, err := Client.GuildEmojiCreate(Message.GuildID, name[0], dataURI, nil)
+				_, err := Client.GuildEmojiCreate(Message.GuildID, RemoveCommand(content), dataURI, nil)
 				if err != nil {
 					buffer.Content = "Couldn't add emoji. " + err.Error()
 					fmt.Println(err.Error())
@@ -1489,7 +1393,7 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 			}
 			grab = previous[0]
 		}
-		if len(grab.Embeds) != 0 {
+		if grab.Embeds != nil {
 			buff.Content = "Sorry, I cannot copy embeds."
 			return
 		}
@@ -1509,8 +1413,6 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		PrintFiles(buff)
 	case "info":
 		Info(buff, content)
-	case "poll":
-		Poll(buff, content)
 	case "cleanspam":
 		CleanSpam(buff, content)
 	case "mute":
@@ -1523,10 +1425,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Blur(buff, content)
 	case "nick":
 		Nick(buff, content)
+	case "addrole":
+		AddRole(buff, content)
 	case "invert":
 		Invert(buff)
-	case "role", "roles":
-		Roles(buff, content)
 	case "b64encode":
 		Base64Encode(buff, content)
 	case "b64decode":
@@ -1547,6 +1449,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Maincra()
 	case "emoji":
 		Emoji(buff, content)
+	case "deleteemoji":
+		DeleteEmoji(buff, content)
 	case "flush":
 		buff.Content = ""
 		buff.Files = nil
