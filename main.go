@@ -11,6 +11,7 @@ import (
 	"time"
 	config "uneex/config"
 	commands "uneex/core"
+	"uneex/cron"
 	databases "uneex/databases"
 
 	"github.com/bwmarrin/discordgo"
@@ -105,9 +106,9 @@ func main() {
 	// Client session should be open now if no errors had occurred
 	err = Manager.Start()
 	// Start cron handler
-	// stop := make(chan bool)
+	stop := make(chan bool)
 	// FIXME Temporarily disable cron worker for debug
-	// go cron.Worker(stop, client)
+	go cron.Worker(stop, Manager)
 	if err != nil {
 		panic(err)
 	}
@@ -142,25 +143,25 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 
 	if lm, ok := lastMessageList[message.Author.ID]; ok && lm.CoolDown() {
 		if lm.LastWasSpam && lm.Count >= spamLimit {
-			client.ChannelMessageSend(message.ChannelID, "Don't spam! "+message.Author.String())
-			warnings, err := databases.SafeQuery(`select spam_warnings from user where id=?`, message.Author.ID)
-			if err == nil {
-				warning := warnings[0]
-				intWarning, _ := strconv.Atoi(warning)
-				maxWarningsRaw := config.Config("MaxWarnings", "Default")
-				maxWarnings, _ := strconv.Atoi(maxWarningsRaw)
-				if intWarning >= maxWarnings {
-					client.ChannelMessageSend(message.ChannelID, "Muting user "+message.Author.String())
-					currentGuild, _ := client.Guild(message.GuildID)
-					muted := commands.Mute(message.Author, currentGuild)
-					if muted {
-						client.ChannelMessageSend(message.ChannelID, "Successfully muted user "+message.Author.String())
-						databases.SafeExec(`update user set spam_warnings=0 where id=?`, message.Author.ID)
-					}
-				} else {
-					databases.SafeExec(`update user set spam_warnings=spam_warnings+1 where id=?`, message.Author.ID)
+			// client.ChannelMessageSend(message.ChannelID, "Don't spam! "+message.Author.String())
+			// warnings, err := databases.SafeQuery(`select spam_warnings from user where id=?`, message.Author.ID)
+			// if err == nil {
+			/*warning := warnings[0]
+			intWarning, _ := strconv.Atoi(warning)
+			maxWarningsRaw := config.Config("MaxWarnings", "Default")
+			maxWarnings, _ := strconv.Atoi(maxWarningsRaw)
+			if intWarning >= maxWarnings {
+				 client.ChannelMessageSend(message.ChannelID, "Muting user "+message.Author.String())
+				currentGuild, _ := client.Guild(message.GuildID)
+				muted := commands.Mute(message.Author, currentGuild)
+				if muted {
+					client.ChannelMessageSend(message.ChannelID, "Successfully muted user "+message.Author.String())
+					databases.SafeExec(`update user set spam_warnings=0 where id=?`, message.Author.ID)
 				}
-			}
+			} else {
+				databases.SafeExec(`update user set spam_warnings=spam_warnings+1 where id=?`, message.Author.ID)
+			}*/
+			// }
 			lm.Reset()
 			lm.ToggleFalse()
 		} else if lm.LastWasSpam && lm.Count < spamLimit && lm.Count > 0 {

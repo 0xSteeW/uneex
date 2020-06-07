@@ -2,6 +2,7 @@ package maria
 
 import (
 	"database/sql"
+	"fmt"
 	"sync"
 )
 
@@ -20,16 +21,18 @@ func SafeQuery(query string, values ...interface{}) ([]string, error) {
 	var resultRows []string
 	rows, err := Database.Query(query, values...)
 	if err != nil {
+		fmt.Println(err)
 		return []string{}, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var tmpString string
-		err := rows.Scan(&tmpString)
+		var tmp string
+		err := rows.Scan(&tmp)
 		if err != nil {
+			fmt.Println("[SafeQuery]:", err)
 			continue
 		}
-		resultRows = append(resultRows, tmpString)
+		resultRows = append(resultRows, tmp)
 	}
 	return resultRows, nil
 }

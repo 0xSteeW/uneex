@@ -18,8 +18,10 @@ import (
 	help "uneex/help"
 	"uneex/moderation"
 
+	"github.com/Knetic/govaluate"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jonas747/dshardmanager"
+	"github.com/marcak/calc/calc"
 	"gopkg.in/gographics/imagick.v3/imagick"
 )
 
@@ -61,6 +63,65 @@ func isLarge(flag string) int {
 		}
 	}
 	return count
+}
+
+var replaceOps map[string]string = map[string]string{
+	"arccos": "acos",
+	"arcsin": "asin",
+	"arctan": "atan",
+	"arctg":  "atan",
+}
+
+func replaceOperators(content string) string {
+	for toReplace, replace := range replaceOps {
+		content = strings.ReplaceAll(content, toReplace, replace)
+	}
+	return content
+}
+
+func fuzzReplace(buffer *Buffer, content string, fuzz string) string {
+	return strings.ReplaceAll(content, fuzz, buffer.Content)
+}
+
+func ParseMath(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	operations, flags := ParseFlags(content)
+	expression := FormatSliceToString(operations)
+	expression = replaceOperators(expression)
+	if len(operations) == 0 {
+		buffer.Content = "Please provide a valid math expression."
+		return
+	}
+	flagFuzz := []string{"f", "fuzz", "v", "var", "vars", "replace", "r"}
+	if fuzz, ok := multipleCommaOK(flags, flagFuzz); ok {
+		if len(fuzz) == 0 {
+			buffer.Content = "You did not provide any variable to replace."
+			return
+		}
+		if buffer.Content == "" {
+			buffer.Content = "Nothing on buffer to add."
+			return
+		}
+		expression = fuzzReplace(buffer, expression, FormatSliceToString(fuzz))
+	}
+	// content = strings.ReplaceAll(content, old string, new string)
+	solution := calc.Solve(expression)
+	buffer.Content = fmt.Sprint(solution)
+}
+
+func ParseMathAlternative(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	exp, err := govaluate.NewEvaluableExpression(content)
+	if err != nil {
+		buffer.Content = "Could not evaluate expression."
+		return
+	}
+	solution, err := exp.Evaluate(nil)
+	if err != nil {
+		buffer.Content = fmt.Sprint("Could not solve. ", err)
+		return
+	}
+	buffer.Content = fmt.Sprint(solution)
 }
 
 func ParseFlags(content string) ([]string, map[string][]string) {
@@ -339,15 +400,91 @@ func GetUsers(buff *Buffer) {
 func ParseRegex(content string) (regex string) {
 	params := strings.Split(content, "`")
 	if len(params) < 3 {
-		return RemoveCommand(content)
+		return "nobackticks"
 	}
 	regexSplit := params[1] // The one in the middle foo `bar` baz
 	return regexSplit
 }
 
-func FindUsers(buffer *Buffer, content string) {
+func Find(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	expressionArray, flags := ParseFlags(content)
+	if len(expressionArray) == 0 {
+		buffer.Content = "You did not provide a search expression."
+		return
+	}
+	expression := ParseRegex(FormatSliceToString(expressionArray))
+	if expression == "nobackticks" {
+		buffer.Content = "Please specify the regex inside backticks (`)"
+		return
+	}
+	flagType := []string{"t", "type", "search-for", "searchfor", "f", "find"}
+	if findType, ok := multipleCommaOK(flags, flagType); ok {
+		if len(findType) == 0 {
+			buffer.Content = "No type specified for searching."
+			return
+		}
+		switch strings.ToLower(FormatSliceToString(findType)) {
+		case "messages", "message":
+			FindMessages(buffer, expression, flags)
+		case "users", "user":
+			FindUsers(buffer, expression, flags)
+		}
+	} else {
+		buffer.Content = "Please specify which category to find with --type or -t"
+		return
+	}
+}
+
+func FindMessages(buffer *Buffer, expression string, flags map[string][]string) {
+	var limit int
+	flagLimit := []string{"l", "lim", "limit", "count", "c", "max", "m", "maximum", "up-to"}
+	if limitRaw, ok := multipleCommaOK(flags, flagLimit); ok {
+		if len(limitRaw) == 0 {
+			buffer.Content = "No limit was provided, default to 100"
+			limit = 100
+		} else {
+			limitInt, err := strconv.Atoi(limitRaw[0])
+			if err != nil {
+				buffer.Content = "Invalid limit."
+				return
+			}
+			limit = limitInt
+		}
+	} else {
+		limit = 100
+	}
+	indexedMessages, err := Client.ChannelMessages(Message.ChannelID, limit, "", "", "")
+	if err != nil {
+		buffer.Content = "Could not index messages."
+		return
+	}
+	foundMessages, err := regexMessages(buffer, expression, indexedMessages)
+	if err != nil {
+		buffer.Content = err.Error()
+		return
+	}
+	buffer.Messages = foundMessages
+	buffer.Content = fmt.Sprint("Got ", len(foundMessages), " messages with the matching criteria out of ", limit, " messages.")
+}
+
+func regexMessages(buffer *Buffer, regex string, messages []*discordgo.Message) ([]*discordgo.Message, error) {
+	searchFor, err := regexp.Compile(regex)
+	if err != nil {
+		buffer.Content = "Could not parse expression."
+		return nil, err
+	}
+	var finalMessages []*discordgo.Message
+	for _, message := range messages {
+		if searchFor.MatchString(message.Content) {
+			finalMessages = append(finalMessages, message)
+		}
+	}
+	return finalMessages, nil
+}
+
+func FindUsers(buffer *Buffer, expression string, flags map[string][]string) {
 	GetUsers(buffer)
-	expression := ParseRegex(content)
 	findUserRegex, err := regexp.Compile(expression)
 	if err != nil {
 		buffer.Content = "Could not parse expression"
@@ -1210,10 +1347,13 @@ func Nick(buffer *Buffer, content string) {
 	var nick string
 	possibleFlags := []string{"n", "nick", "name", "nickname"}
 	if nickName, ok := multipleCommaOK(nickFlag, possibleFlags); ok {
-		nick = nickName[0]
-		if nickName[0] == "" {
-			nick = buffer.Content
+		if len(nickName) == 0 || buffer.Content == "" {
+			buffer.Content = "No nickname on buffer nor provided."
+			return
 		}
+		nick = nickName[0]
+	} else {
+		nick = buffer.Content
 	}
 	if nick == "" {
 		buffer.Content = "Invalid nickname."
@@ -1254,9 +1394,11 @@ func ServerIcon(buffer *Buffer) {
 }
 
 func NewCron(content string, buffer *Buffer) {
+	content = RemoveCommand(content)
 	timeStamp := strings.Split(content, " -c")[0]
 	Client.ChannelMessageSend(Message.ChannelID, "`"+timeStamp+"`")
 	timeStampParse, err := time.Parse(`Mon Jan 2 15:04:05 -0700 MST 2006`, timeStamp)
+	timeStampParse = timeStampParse.UTC()
 	if err != nil {
 		Client.ChannelMessageSend(Message.ChannelID, "Sorry, the time format you provided isn't valid.")
 		Client.ChannelMessageSend(Message.ChannelID, err.Error())
@@ -1294,9 +1436,10 @@ type Bufferable interface {
 }
 
 type Buffer struct {
-	Content string
-	Files   map[string][]byte
-	Users   []*discordgo.User
+	Content  string
+	Files    map[string][]byte
+	Users    []*discordgo.User
+	Messages []*discordgo.Message
 	// Check if userlist is just from getting &list, and warn the user
 	HasFilteredUsers bool
 	Pipes            []string
@@ -1556,8 +1699,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Cat(buff, content)
 	case "list", "userlist":
 		GetUsers(buff)
-	case "findusers", "find":
-		FindUsers(buff, content)
+	case "find":
+		Find(buff, content)
+	case "math":
+		ParseMath(buff, content)
 	case "unemoji":
 		Unemoji(buff, content)
 	case "maincra":

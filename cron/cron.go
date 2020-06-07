@@ -3,9 +3,10 @@ package cron
 import (
 	"fmt"
 	"time"
+
 	databases "uneex/databases"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/jonas747/dshardmanager"
 )
 
 type RowContent struct {
@@ -14,36 +15,42 @@ type RowContent struct {
 	Content   string
 }
 
-func Worker(stop chan bool, client *discordgo.Session) {
+func Worker(stop chan bool, manager *dshardmanager.Manager) {
 	for {
 		select {
 		case <-stop:
 			break
 		default:
-			fmt.Println(time.Now().String())
-			remindUsers, err := databases.Database.Query(`select * from jobs where timestamp=current_timestamp()`)
+			//date, _ := databases.SafeQuery(`select TIME_FORMAT(TIME(CONVERT_TZ(SYSDATE(),'+02:00','+00:00')), '%H:%i')`)
+			remindUsers, err := databases.Database.Query(`select * from jobs where TIME_FORMAT(timestamp, '%H:%i')=TIME_FORMAT(TIME(CONVERT_TZ(SYSDATE(),'+02:00','+00:00')), '%H:%i')`)
 			if err != nil {
-				fmt.Println(err.Error())
-				continue
+				fmt.Println("[Worker]:", err)
 			}
-			var users []RowContent
 			defer remindUsers.Close()
+			var users []*RowContent
 			for remindUsers.Next() {
-				parse := new(RowContent)
-				err := remindUsers.Scan(&parse)
+				scan := new(RowContent)
+				err := remindUsers.Scan(&scan)
 				if err != nil {
 					continue
 				}
-				users = append(users, *parse)
+				users = append(users, scan)
+
 			}
-			for _, userLoop := range users {
-				dm, err := client.UserChannelCreate(userLoop.User)
-				if err != nil {
-					continue
-				}
-				client.ChannelMessageSend(dm.ID, "I remind you: "+userLoop.Content)
-			}
-			time.Sleep(1 * time.Minute)
+			// go messageQueued(users, manager)
+			time.Sleep(5 * time.Second)
 		}
+	}
+}
+
+func messageQueued(rc []RowContent, manager *dshardmanager.Manager) {
+	dmsession := manager.Session(0)
+	for _, userLoop := range rc {
+		dm, err := dmsession.UserChannelCreate(userLoop.User)
+		if err != nil {
+			continue
+		}
+		dmsession.ChannelMessageSend(dm.ID, "I remind you: "+userLoop.Content)
+		time.Sleep(1 * time.Second)
 	}
 }

@@ -36,3 +36,4 @@
 +unemoji
 +addemoji
 
+SELECT TIME(SYSDATE());
