@@ -92,10 +92,10 @@ func TextEmbedFields() []*discordgo.MessageEmbedField {
 }
 
 func ModerationEmbedFields() []*discordgo.MessageEmbedField {
-	rowKick := &discordgo.MessageEmbedField{Name: "kick (IDS/Mentions) -r [Reason]", Value: "Kick one or multiple users. Mentions ,ids and users stored with &find or &list are accepted. Use -r [reason] at the end to give a reason."}
-	rowMute := &discordgo.MessageEmbedField{Name: "mute (IDs/Mentions)", Value: "Mute a user (work in progress)"}
+	rowKick := &discordgo.MessageEmbedField{Name: "kick (IDS/Mentions) -r [Reason]", Value: ""}
+	rowMute := &discordgo.MessageEmbedField{Name: "mute (IDs/Mentions)", Value: ""}
 	rowList := &discordgo.MessageEmbedField{Name: "list", Value: "Get all users from the server and save them int the buffer."}
-	rowFind := &discordgo.MessageEmbedField{Name: "find `(Regex expression)`", Value: "Work with previous &list command and retrieve every user that matches the expression. Example: &list | &find `^[a-z]+`"}
+	rowFind := &discordgo.MessageEmbedField{Name: "find `(Regex expression)`", Value: ""}
 
 	rowBan := &discordgo.MessageEmbedField{Name: "ban (IDS/Mentions) -d (Days)", Value: "Ban one or multiple users. Mentions ,ids and users stored with &find or &list are accepted. Use -d [days] to specify ban time."}
 	rowCleanSpam := &discordgo.MessageEmbedField{Name: "cleanspam (Max)", Value: "Clean possible spam messages, with a maximum of 500."}
@@ -107,14 +107,39 @@ func ModerationEmbedFields() []*discordgo.MessageEmbedField {
 }
 
 func ImageEmbedFields() []*discordgo.MessageEmbedField {
-	rowAvatar := &discordgo.MessageEmbedField{Name: "avatar, av [mention]", Value: "Save your avatar image to the buffer. If you mention an user, it will be added instead."}
-	rowServerIcon := &discordgo.MessageEmbedField{Name: "servericon", Value: "Push the server icon to the buffer."}
-	rowPrintFiles := &discordgo.MessageEmbedField{Name: "printfiles", Value: "Force print current files in the buffer."}
-	rowBlur := &discordgo.MessageEmbedField{Name: "blur (Amount)", Value: "Blur images on buffer, with a maximum amount of 50."}
-	rowInvert := &discordgo.MessageEmbedField{Name: "invert", Value: "Convert images on buffer to negative."}
-	rowRotate := &discordgo.MessageEmbedField{Name: "rotate (Direction)", Value: "Rotate images on buffer. Valid directions: up, down, left, right."}
-	rowUnemoji := &discordgo.MessageEmbedField{Name: "unemoji [Emoji]", Value: "Get downloadable image of an emoji. It can also get emojis from copied messages. Pushes images to the buffer. Caution: This only works with custom emojis!"}
-	rowAddEmoji := &discordgo.MessageEmbedField{Name: "addemoji (Name)", Value: "Add images on buffer as emojis on the current server, with given name."}
-	rowDeleteEmoji := &discordgo.MessageEmbedField{Name: "deleteemoji (Name)", Value: "Delete emoji with provided name."}
+	rowAvatar := &discordgo.MessageEmbedField{Name: "avatar, av [mention]", Value: ""}
+	rowServerIcon := &discordgo.MessageEmbedField{Name: "servericon", Value: ""}
+	rowPrintFiles := &discordgo.MessageEmbedField{Name: "printfiles", Value: ""}
+	rowBlur := &discordgo.MessageEmbedField{Name: "blur (Amount)", Value: ""}
+	rowInvert := &discordgo.MessageEmbedField{Name: "invert", Value: ""}
+	rowRotate := &discordgo.MessageEmbedField{Name: "rotate (Direction)", Value: ""}
+	rowUnemoji := &discordgo.MessageEmbedField{Name: "unemoji [Emoji]", Value: ""}
+	rowAddEmoji := &discordgo.MessageEmbedField{Name: "addemoji (Name)", Value: ""}
+	rowDeleteEmoji := &discordgo.MessageEmbedField{Name: "deleteemoji (Name)", Value: ""}
 	return []*discordgo.MessageEmbedField{rowAddEmoji, rowAvatar, rowBlur, rowInvert, rowDeleteEmoji, rowPrintFiles, rowRotate, rowServerIcon, rowUnemoji}
+}
+
+func GetCommandHelp(command string) (explanation string, usage string) {
+	if help, ok := commandsHelp[command]; ok {
+		return help, ""
+	}
+	return "", ""
+}
+
+var commandsHelp map[string]string = map[string]string{
+	"avatar":     "Save your avatar image to the buffer. If you mention an user, it will be added instead.",
+	"servericon": "Push the server icon to the buffer.",
+	"printfiles": "Force print current files in the buffer.",
+	"blur":       "Blur images on buffer, with a maximum amount of 50.",
+	"invert":     "Convert images on buffer to negative.",
+	"rotate":     "Rotate images on buffer. Valid directions: up, down, left, right.",
+	"unemoji":    "Get downloadable image of an emoji. It can also get emojis from copied messages. Pushes images to the buffer. Caution: This only works with custom emojis!",
+	"emoji":      "Add or delete specified emojis or emojis on buffer.",
+
+	"kick":                                 "Kick one or multiple users. Mentions ,ids and users stored with &find or &list are accepted. Use -r [reason] at the end to give a reason.",
+	"mute":                                 "Mute a user (work in progress)",
+	"find":                                 "Filter any category with the given expression. Categories available are: channels, messages, users. Example: &find `^A` -t messages (Will find every message from the last 100 that starts with A.)",
+	"ban (Mentions/IDS) -r Reason -d Days": "Ban selected users. (Will grab users on buffer if no mention or ID was provided).",
+
+	"delete --type Type": "Delete every item of the selected category. It must be preceded by a &find command. Example: &find `^[0-9]+` -t users | &delete -t messages (Will delete every message starting with a number from the last 100 messages.)",
 }

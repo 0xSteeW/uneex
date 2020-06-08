@@ -194,7 +194,11 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 	}
 
 	if strings.HasPrefix(message.Content, fmt.Sprintf("<@!%s>", client.State.User.ID)) {
-		client.ChannelMessageSend(message.ChannelID, "Hello! My prefix is &. Use &help to get some help.")
+		prefix, err := commands.GetPrefixOrAdd(message.GuildID)
+		if err != nil {
+			prefix = config.Config("Prefix", "Default")
+		}
+		client.ChannelMessageSend(message.ChannelID, "Hello! My prefix is "+prefix+". Use "+prefix+"help to get some help.")
 		return
 	}
 
@@ -214,7 +218,12 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 }
 
 func PrefixHandler(message *discordgo.MessageCreate) (bool, string) {
-	if strings.HasPrefix(message.Content, config.Config("Prefix", "Default")) {
+	// Get prefix from database
+	prefix, err := commands.GetPrefixOrAdd(message.GuildID)
+	if err != nil {
+		prefix = "&"
+	}
+	if strings.HasPrefix(message.Content, prefix) {
 		// Strip prefix
 		withoutPrefix := strings.TrimPrefix(message.Content, config.Config("Prefix", "Default"))
 		return true, withoutPrefix

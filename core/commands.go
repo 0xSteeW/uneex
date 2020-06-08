@@ -2,10 +2,12 @@ package commands
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"regexp"
@@ -66,10 +68,8 @@ func isLarge(flag string) int {
 }
 
 var replaceOps map[string]string = map[string]string{
-	"arccos": "acos",
-	"arcsin": "asin",
-	"arctan": "atan",
-	"arctg":  "atan",
+	"arc": "a",
+	"tg":  "tan",
 }
 
 func replaceOperators(content string) string {
@@ -83,8 +83,63 @@ func fuzzReplace(buffer *Buffer, content string, fuzz string) string {
 	return strings.ReplaceAll(content, fuzz, buffer.Content)
 }
 
+func Prefix(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	maxLenRaw := config.Config("MaxPrefixLength", "Default")
+	maxLen, _ := strconv.Atoi(maxLenRaw)
+	if len(content) > maxLen {
+		buffer.Content = "Prefix can not exceed " + maxLenRaw + " characters."
+		return
+	}
+	rowsUpdated, err := databases.SafeExec(`update guild set prefix=? where id=?`, content, Message.GuildID)
+	if err != nil {
+		buffer.Content = "Could not update prefix."
+		return
+	}
+	rowsUpdatedCount, _ := rowsUpdated.RowsAffected()
+	if rowsUpdatedCount > 0 {
+		buffer.Content = "Prefix updated successfully to: " + content
+	}
+}
+
+func Choose(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	options := strings.Split(content, "/")
+	if len(options) <= 1 {
+		buffer.Content = "Please provide some options."
+		return
+	}
+	chosen := options[randMax(len(options)-1)]
+	buffer.Content = chosen
+}
+
+func randMax(max int) int {
+	seed := time.Now().UnixNano()
+	rand.Seed(seed)
+	random := rand.Intn(max)
+	return random
+}
+
+func Rand(buffer *Buffer, content string) {
+	content = RemoveCommand(content)
+	// Try to parse maxval
+	max, err := strconv.Atoi(content)
+	if err != nil {
+		buffer.Content = "That is not a valid max integer."
+		return
+	}
+	if max <= 0 {
+		buffer.Content = "Please input a positive number and not 0."
+		return
+	}
+
+	buffer.Content = fmt.Sprint(randMax(max))
+
+}
+
 func ParseMath(buffer *Buffer, content string) {
 	content = RemoveCommand(content)
+	var convert bool
 	operations, flags := ParseFlags(content)
 	expression := FormatSliceToString(operations)
 	expression = replaceOperators(expression)
@@ -92,7 +147,7 @@ func ParseMath(buffer *Buffer, content string) {
 		buffer.Content = "Please provide a valid math expression."
 		return
 	}
-	flagFuzz := []string{"f", "fuzz", "v", "var", "vars", "replace", "r"}
+	flagFuzz := []string{"f", "fuzz", "v", "var", "vars", "replace", "r", "variable", "variables"}
 	if fuzz, ok := multipleCommaOK(flags, flagFuzz); ok {
 		if len(fuzz) == 0 {
 			buffer.Content = "You did not provide any variable to replace."
@@ -104,8 +159,16 @@ func ParseMath(buffer *Buffer, content string) {
 		}
 		expression = fuzzReplace(buffer, expression, FormatSliceToString(fuzz))
 	}
+	flagToDegrees := []string{"deg", "degs", "to-degrees", "degrees", "todegrees", "convert-to-degrees", "td", "t-d", "d"}
+	if _, ok := multipleCommaOK(flags, flagToDegrees); ok {
+		convert = true
+	}
 	// content = strings.ReplaceAll(content, old string, new string)
+	expression = strings.ReplaceAll(expression, " ", "")
 	solution := calc.Solve(expression)
+	if convert {
+		solution = ((solution) * 180) / math.Pi
+	}
 	buffer.Content = fmt.Sprint(solution)
 }
 
@@ -400,7 +463,7 @@ func GetUsers(buff *Buffer) {
 func ParseRegex(content string) (regex string) {
 	params := strings.Split(content, "`")
 	if len(params) < 3 {
-		return "nobackticks"
+		return content
 	}
 	regexSplit := params[1] // The one in the middle foo `bar` baz
 	return regexSplit
@@ -414,10 +477,6 @@ func Find(buffer *Buffer, content string) {
 		return
 	}
 	expression := ParseRegex(FormatSliceToString(expressionArray))
-	if expression == "nobackticks" {
-		buffer.Content = "Please specify the regex inside backticks (`)"
-		return
-	}
 	flagType := []string{"t", "type", "search-for", "searchfor", "f", "find"}
 	if findType, ok := multipleCommaOK(flags, flagType); ok {
 		if len(findType) == 0 {
@@ -425,9 +484,9 @@ func Find(buffer *Buffer, content string) {
 			return
 		}
 		switch strings.ToLower(FormatSliceToString(findType)) {
-		case "messages", "message":
+		case "messages", "message", "m", "msg":
 			FindMessages(buffer, expression, flags)
-		case "users", "user":
+		case "users", "user", "u":
 			FindUsers(buffer, expression, flags)
 		}
 	} else {
@@ -739,28 +798,34 @@ func Kick(buffer *Buffer, content string) {
 }
 
 func Delete(buffer *Buffer, content string) {
-	if !moderation.HasPermission("manageMessages", GetPermissionsInt()) {
-		buffer.Content = "Sorry, you don't have enough permissions."
+	content = RemoveCommand(content)
+	var category string
+	_, flags := ParseFlags(content)
+	flagType := []string{"type", "t"}
+	if dtype, ok := multipleCommaOK(flags, flagType); ok {
+		if len(dtype) == 0 {
+			buffer.Content = "Please specify the type of object to delete."
+			return
+		}
+		category = FormatSliceToString(dtype)
+	} else {
+		buffer.Content = "Please specify what to delete with -t or --type"
 		return
 	}
-	if RemoveCommand(content) == "" {
-		buffer.Content = "Number of messages hasn't been provided."
+	switch strings.ToLower(category) {
+	case "messages", "message", "msg", "m":
+		if !moderation.HasPermission("manageMessages", GetPermissionsInt()) {
+			buffer.Content = "Sorry, you don't have enough permissions."
+			return
+		}
+		err := Client.ChannelMessagesBulkDelete(Message.ChannelID, MessagesToString(buffer.Messages))
+		if err != nil {
+			buffer.Content = "Could not delete messages."
+			return
+		}
+		buffer.Content = fmt.Sprint("Successfully deleted ", len(buffer.Messages), " messages.")
 		return
 	}
-	number, err := strconv.Atoi(RemoveCommand(content))
-	if err != nil || number > 100 || number <= 0 {
-		buffer.Content = "Provided number is too high (100) or not valid"
-		return
-	}
-	messages, err := Client.ChannelMessages(Message.ChannelID, number, "", "", "")
-	messageIDS := MessagesToString(messages)
-	err = Client.ChannelMessagesBulkDelete(Message.ChannelID, messageIDS)
-	if err != nil {
-		buffer.Content = "Couldn't delete messages."
-		return
-	}
-	buffer.Content = "Messages deleted successfully."
-
 }
 
 func MessagesToString(messages []*discordgo.Message) []string {
@@ -1191,6 +1256,21 @@ func Reverse(buffer *Buffer) {
 	buffer.Content = newString
 }
 
+func Mirror(buffer *Buffer) {
+	wand, pw := OpenIM(buffer)
+	err := wand.FlopImage()
+	if err != nil {
+		buffer.Content = "Could not mirror image."
+		buffer.FlushFiles()
+		defer pw.Destroy()
+		defer wand.Destroy()
+		return
+	}
+	SaveBlob(buffer, wand, pw)
+	buffer.Content = "Flipped image successfully."
+	return
+}
+
 func Blur(buffer *Buffer, content string) {
 	wand, pw := OpenIM(buffer)
 	MAX_SIGMA_RAW := config.Config("MaxSigma", "Default")
@@ -1524,6 +1604,15 @@ func (buff *Buffer) Print() {
 	}
 }
 
+func GetPrefixOrAdd(guildID string) (string, error) {
+	prefix, err := databases.SafeQuery(`select prefix from guild where id=?`, guildID)
+	if err != nil || len(prefix) == 0 {
+		databases.SafeExec(`insert into guild values(?,?)`, guildID, config.Config("Prefix", "Default"))
+		return "", errors.New("No guild found.")
+	}
+	return prefix[0], nil
+}
+
 func (buff *Buffer) AddFile(fname string, reader []byte) {
 	file := make(map[string][]byte)
 	file[fname] = reader
@@ -1592,7 +1681,11 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		// command = buff.Next[0]
 	}
 
-	switch strings.ToLower(strings.TrimPrefix(command, "&")) {
+	prefixPerGuild, err := GetPrefixOrAdd(Message.GuildID)
+	if err != nil {
+		prefixPerGuild = "&"
+	}
+	switch strings.ToLower(strings.TrimPrefix(command, prefixPerGuild)) {
 	case "help":
 		Help(buff, content)
 	case "ping":
@@ -1675,12 +1768,16 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		CleanSpam(buff, content)
 	case "mute":
 		ManualMute(buff, content)
-	case "cleanbulk":
+	case "choose":
+		Choose(buff, content)
+	case "delete":
 		Delete(buff, content)
 	case "serverinfo":
 		ServerInfo(buff)
 	case "blur":
 		Blur(buff, content)
+	case "mirror":
+		Mirror(buff)
 	case "nick":
 		Nick(buff, content)
 	case "invert":
@@ -1689,6 +1786,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		Roles(buff, content)
 	case "b64encode":
 		Base64Encode(buff, content)
+	case "setprefix":
+		Prefix(buff, content)
+	case "rand":
+		Rand(buff, content)
 	case "b64decode":
 		Base64Decode(buff, content)
 	case "shardid":
@@ -1739,6 +1840,10 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		buff.Errors += 1
 		return
 	}
+}
+
+func HandleError(buffer *Buffer, command string) {
+	help.GetCommandHelp(command)
 }
 
 func Help(buffer *Buffer, content string) {
