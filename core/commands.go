@@ -79,6 +79,31 @@ func replaceOperators(content string) string {
 	return content
 }
 
+func DonorManager(buffer *Buffer, content string) {
+	if Message.Author.ID != config.Config("ID", "Owner") {
+		buffer.Content = "Sorry, only the owner can do that."
+		return
+	}
+	content = RemoveCommand(content)
+	var userType string
+	users, flags := ParseFlags(content)
+	mentions := GetMentions(buffer, FormatSliceToString(users))
+	flagType := []string{"type", "t"}
+	if utype, ok := multipleCommaOK(flags, flagType); ok {
+		if len(utype) == 0 {
+			buffer.Content = "User type not specified."
+			return
+		}
+		userType = FormatSliceToString(utype)
+	}
+	_, err := databases.SafeExec(`update user set usertype=? where id=?`, userType, mentions[0].ID)
+	if err != nil {
+		buffer.Content = "Could not modify donor."
+		return
+	}
+	buffer.Content = "Donor changed successfully."
+}
+
 func fuzzReplace(buffer *Buffer, content string, fuzz string) string {
 	return strings.ReplaceAll(content, fuzz, buffer.Content)
 }
@@ -1622,7 +1647,11 @@ func (buff *Buffer) AddFile(fname string, reader []byte) {
 func (buff *Buffer) HandleEachPipe() {
 	// buff.Pop()
 	// //FIXME only for &pipe
-	maxPipes, _ := strconv.Atoi(config.Config("MaxPipes", "Default"))
+	maxPipesRaw, err := databases.SafeQuery(`select max_pipes from usertype where id=(select usertype from user where id=?)`, Message.Author.ID)
+	if err != nil {
+		return
+	}
+	maxPipes, _ := strconv.Atoi(maxPipesRaw[0])
 	if len(buff.Next) >= maxPipes && Message.Author.ID != config.Config("ID", "Owner") {
 		Client.ChannelMessageSend(Message.ChannelID, "Sorry, you've have reached the maximum pipe limit: "+config.Config("MaxPipes", "Default"))
 		return
@@ -1796,6 +1825,8 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		ThisShard(buff)
 	case "rotate":
 		Rotate(buff, content)
+	case "donormg":
+		DonorManager(buff, content)
 	case "cat":
 		Cat(buff, content)
 	case "list", "userlist":
