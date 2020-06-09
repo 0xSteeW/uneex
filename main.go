@@ -90,7 +90,7 @@ func main() {
 	coolDownRaw, _ := strconv.Atoi(config.Config("CoolDownTime", "Default"))
 	coolDown = float64(coolDownRaw)
 	spamLimit, _ = strconv.Atoi(config.Config("SpamLimit", "Default"))
-	databases.Database, err = sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", config.Config("User", "Maria"), config.Config("Password", "Maria"), config.Config("Name", "Maria")))
+	databases.Database, err = sql.Open("mysql", fmt.Sprintf("%s:%s@/%s?parseTime=True", config.Config("User", "Maria"), config.Config("Password", "Maria"), config.Config("Name", "Maria")))
 	if err != nil {
 		panic(err)
 	}
@@ -180,15 +180,14 @@ func OnMessageCreate(client *discordgo.Session, message *discordgo.MessageCreate
 		lm.SetMessage(message)
 	} else if !ok {
 		lastMessageList[message.Author.ID] = new(lastMessage)
-		rows, err := databases.SafeQuery(`select * from user where id=?`, message.Author.ID)
+
+		id, err := databases.SafeQuery(`select id from user where id=?`, message.Author.ID)
 		if err != nil {
+			fmt.Println(err)
 			return
 		}
-		if len(rows) == 0 {
-			_, err := databases.SafeExec(`insert into user values(?,?,?)`, message.Author.ID, 0, "Default")
-			if err != nil {
-				return
-			}
+		if len(id) == 0 {
+			databases.SafeExec(`insert ignore into user values(?,?,?)`, message.Author.ID, 0, "Default")
 		}
 
 	}

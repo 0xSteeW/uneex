@@ -21,29 +21,30 @@ func Worker(stop chan bool, manager *dshardmanager.Manager) {
 		case <-stop:
 			break
 		default:
-			//date, _ := databases.SafeQuery(`select TIME_FORMAT(TIME(CONVERT_TZ(SYSDATE(),'+02:00','+00:00')), '%H:%i')`)
-			remindUsers, err := databases.Database.Query(`select * from jobs where TIME_FORMAT(timestamp, '%H:%i')=TIME_FORMAT(TIME(CONVERT_TZ(SYSDATE(),'+02:00','+00:00')), '%H:%i')`)
+			//databases.SafeQuery(date, `select TIME_FORMAT(TIME(CONVERT_TZ(SYSDATE(),'+02:00','+00:00')), '%H:%i')`)
+			remindUsers, err := databases.Database.Query(`select * from jobs where TIME_FORMAT(TIME(timestamp), '%H:%i')=TIME_FORMAT(TIME(?), '%H:%i')`, time.Now().UTC())
 			if err != nil {
 				fmt.Println("[Worker]:", err)
+				return
 			}
 			defer remindUsers.Close()
 			var users []*RowContent
 			for remindUsers.Next() {
 				scan := new(RowContent)
-				err := remindUsers.Scan(&scan)
+				err := remindUsers.Scan(&scan.Timestamp, &scan.User, &scan.Content)
 				if err != nil {
 					continue
 				}
 				users = append(users, scan)
 
 			}
-			// go messageQueued(users, manager)
-			time.Sleep(5 * time.Second)
+			go messageQueued(users, manager)
+			time.Sleep(1 * time.Minute)
 		}
 	}
 }
 
-func messageQueued(rc []RowContent, manager *dshardmanager.Manager) {
+func messageQueued(rc []*RowContent, manager *dshardmanager.Manager) {
 	dmsession := manager.Session(0)
 	for _, userLoop := range rc {
 		dm, err := dmsession.UserChannelCreate(userLoop.User)

@@ -1514,11 +1514,11 @@ func NewCron(content string, buffer *Buffer) {
 	for _, word := range remind {
 		remindLiteral = remindLiteral + word
 	}
-	userAlreadyExists, err := databases.SafeQuery(`select * from user where id=?`, Message.Author.ID)
+	id, err := databases.SafeQuery(`select * from user where id=?`, Message.Author.ID)
 	if err != nil {
 		return
 	}
-	if len(userAlreadyExists) == 0 {
+	if len(id) == 0 {
 		databases.SafeExec(`insert into user values(?)`, Message.Author.ID)
 	}
 	databases.SafeExec(`insert into jobs values(?,?,?)`, timeStampParse, Message.Author.ID, remindLiteral)

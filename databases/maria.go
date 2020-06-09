@@ -18,8 +18,8 @@ func SafeExec(query string, values ...interface{}) (sql.Result, error) {
 }
 
 func SafeQuery(query string, values ...interface{}) ([]string, error) {
-	var resultRows []string
 	rows, err := Database.Query(query, values...)
+	var scan []string
 	if err != nil {
 		fmt.Println(err)
 		return []string{}, err
@@ -32,7 +32,7 @@ func SafeQuery(query string, values ...interface{}) ([]string, error) {
 			fmt.Println("[SafeQuery]:", err)
 			continue
 		}
-		resultRows = append(resultRows, tmp)
+		scan = append(scan, tmp)
 	}
-	return resultRows, nil
+	return scan, nil
 }
