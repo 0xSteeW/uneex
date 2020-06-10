@@ -39,6 +39,7 @@ func Worker(stop chan bool, manager *dshardmanager.Manager) {
 
 			}
 			go messageQueued(users, manager)
+			go deleteOlder()
 			time.Sleep(1 * time.Minute)
 		}
 	}
@@ -51,7 +52,11 @@ func messageQueued(rc []*RowContent, manager *dshardmanager.Manager) {
 		if err != nil {
 			continue
 		}
-		dmsession.ChannelMessageSend(dm.ID, "I remind you: "+userLoop.Content)
+		dmsession.ChannelMessageSend(dm.ID, "You have a reminder: "+userLoop.Content)
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func deleteOlder() {
+	databases.SafeExec(`delete from jobs where timestamp<?`, time.Now().UTC())
 }

@@ -1498,22 +1498,77 @@ func ServerIcon(buffer *Buffer) {
 	buffer.AddFile(guild.ID+extension, reader)
 }
 
+var timeValues map[string]time.Duration = map[string]time.Duration{
+	"minute": time.Minute,
+	"second": time.Second,
+	"hour":   time.Hour,
+	"day":    time.Hour * 24,
+	"week":   time.Hour * 24 * 7,
+	"month":  time.Hour * 24 * 30,
+	"year":   time.Hour * 24 * 30 * 12,
+}
+
+func getTimeLiteral(literal string) time.Duration {
+	switch strings.ToLower(literal) {
+	case "m", "min", "mins", "minutes":
+		return timeValues["minute"]
+	case "s", "sec", "second", "seconds", "secs":
+		return timeValues["second"]
+	case "h", "hour", "hours", "hrs", "hr":
+		return timeValues["hour"]
+	case "d", "day", "days":
+		return timeValues["day"]
+	case "w", "week", "weeks":
+		return timeValues["week"]
+	case "month", "months":
+		return timeValues["month"]
+	case "y", "year", "years", "yrs":
+		return timeValues["year"]
+	}
+	return 0
+}
+
+func addTimes(stack map[int]string) time.Duration {
+	var totalTime time.Duration
+	for value, durationLiteral := range stack {
+		totalTime += getTimeLiteral(durationLiteral) * time.Duration(value)
+	}
+	return totalTime
+}
+
+func parseTime(content []string) *time.Time {
+	var stack map[int]string
+	stack = make(map[int]string)
+	var currentStackInteger int
+	getFirstElement, err := strconv.Atoi(content[0])
+	if err != nil {
+		return nil
+	}
+	currentStackInteger = getFirstElement
+	for _, element := range content {
+		isNaN, err := strconv.Atoi(element)
+		if err != nil {
+			stack[currentStackInteger] = element
+		} else {
+			currentStackInteger = isNaN
+		}
+	}
+	scheduledTimeDuration := addTimes(stack)
+	if scheduledTimeDuration == 0 {
+		return nil
+	}
+	scheduledTime := time.Now().UTC().Add(scheduledTimeDuration)
+	return &scheduledTime
+}
+
 func NewCron(content string, buffer *Buffer) {
 	content = RemoveCommand(content)
-	timeStamp := strings.Split(content, " -c")[0]
-	Client.ChannelMessageSend(Message.ChannelID, "`"+timeStamp+"`")
-	timeStampParse, err := time.Parse(`Mon Jan 2 15:04:05 -0700 MST 2006`, timeStamp)
-	timeStampParse = timeStampParse.UTC()
-	if err != nil {
-		Client.ChannelMessageSend(Message.ChannelID, "Sorry, the time format you provided isn't valid.")
-		Client.ChannelMessageSend(Message.ChannelID, err.Error())
-		return
+	///////////////////////////////////////////////////////////////
+	future, _ := ParseFlags(content)
+	if len(future) == 0 {
+		buffer.Content = "No time format was provided"
 	}
-	remind := strings.Split(content, "-c")[1:]
-	var remindLiteral string
-	for _, word := range remind {
-		remindLiteral = remindLiteral + word
-	}
+	scheduled := parseTime(future)
 	id, err := databases.SafeQuery(`select * from user where id=?`, Message.Author.ID)
 	if err != nil {
 		return
@@ -1521,8 +1576,8 @@ func NewCron(content string, buffer *Buffer) {
 	if len(id) == 0 {
 		databases.SafeExec(`insert into user values(?)`, Message.Author.ID)
 	}
-	databases.SafeExec(`insert into jobs values(?,?,?)`, timeStampParse, Message.Author.ID, remindLiteral)
-	Client.ChannelMessageSend(Message.ChannelID, "Succesfully added remind for "+timeStampParse.String()+" with content: "+remindLiteral)
+	databases.SafeExec(`insert into jobs values(?,?,?)`, scheduled, Message.Author.ID, "testParseLiterals")
+	Client.ChannelMessageSend(Message.ChannelID, "Succesfully added remind for "+scheduled.String())
 }
 
 func OnlyRemoveCommand(cmd string) string {
