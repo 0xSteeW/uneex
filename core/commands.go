@@ -1561,14 +1561,58 @@ func parseTime(content []string) *time.Time {
 	return &scheduledTime
 }
 
-func NewCron(content string, buffer *Buffer) {
+func Cron(content string, buffer *Buffer) {
 	content = RemoveCommand(content)
-	///////////////////////////////////////////////////////////////
-	future, _ := ParseFlags(content)
+	future, flags := ParseFlags(content)
+	flagDelete := []string{"del", "d", "delete"}
+	if _, ok := multipleCommaOK(flags, flagDelete); ok {
+		deleted, err := databases.SafeExec(`delete from jobs where user=?`, Message.Author.ID)
+		if err != nil {
+			fmt.Println(err)
+			buffer.Content = "Could not delete reminder."
+			return
+		}
+		ra, _ := deleted.RowsAffected()
+		if ra != 0 {
+			buffer.Content = "Deleted your last reminder."
+			return
+		}
+		buffer.Content = "You didn't have any reminders."
+		return
+	}
 	if len(future) == 0 {
 		buffer.Content = "No time format was provided"
+		return
+	}
+	flagContent := []string{"content", "c", "remind", "r"}
+	var remind string
+	cronJobs, err := databases.SafeQuery(`select timestamp from jobs where user=?`, Message.Author.ID)
+	if err != nil {
+		Client.ChannelMessageSend(Message.ChannelID, "An error occurred while fetching cron jobs.")
+		return
+	}
+	maxCronJobs, err := strconv.Atoi(config.Config("MaxCronJobs", "Default"))
+	if err != nil {
+		Client.ChannelMessageSend(Message.ChannelID, "An error occurred while fetching cron jobs.")
+		return
+	}
+	if len(cronJobs) == maxCronJobs {
+		Client.ChannelMessageSend(Message.ChannelID, fmt.Sprintf("You have reached your maximum Cron Job limit. Your next remind is at: %s", cronJobs[0]))
+		return
+	}
+
+	if contentSlice, ok := multipleCommaOK(flags, flagContent); ok {
+		if len(contentSlice) == 0 {
+			buffer.Content = "No content provided for remind."
+			return
+		}
+		remind = FormatSliceToString(contentSlice)
 	}
 	scheduled := parseTime(future)
+	if scheduled == nil {
+		buffer.Content = "Could not parse time. Please separate arguments with spaces."
+		return
+	}
 	id, err := databases.SafeQuery(`select * from user where id=?`, Message.Author.ID)
 	if err != nil {
 		return
@@ -1576,8 +1620,8 @@ func NewCron(content string, buffer *Buffer) {
 	if len(id) == 0 {
 		databases.SafeExec(`insert into user values(?)`, Message.Author.ID)
 	}
-	databases.SafeExec(`insert into jobs values(?,?,?)`, scheduled, Message.Author.ID, "testParseLiterals")
-	Client.ChannelMessageSend(Message.ChannelID, "Succesfully added remind for "+scheduled.String())
+	databases.SafeExec(`insert into jobs values(?,?,?)`, scheduled, Message.Author.ID, remind)
+	Client.ChannelMessageSend(Message.ChannelID, "Succesfully added remind for "+scheduled.String()+" with content: "+remind)
 }
 
 func OnlyRemoveCommand(cmd string) string {
@@ -1900,28 +1944,11 @@ func CommandHandler(client *discordgo.Session, message *discordgo.MessageCreate,
 		buff.Content = ""
 		buff.Files = nil
 
-	case "cron":
+	case "cron", "remind", "remindme":
 		// Check maximum crons for the user, should be 1 by default
-		cronJobs, err := databases.SafeQuery(`select timestamp from jobs where user=?`, message.Author.ID)
-		if err != nil {
-			Client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
-			return
-		}
-		if err != nil {
-			Client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
-			return
-		}
-		maxCronJobs, err := strconv.Atoi(config.Config("MaxCronJobs", "Default"))
-		if err != nil {
-			Client.ChannelMessageSend(message.ChannelID, "An error occurred while fetching cron jobs.")
-			return
-		}
-		if len(cronJobs) == maxCronJobs {
-			Client.ChannelMessageSend(origin, fmt.Sprintf("You have reached your maximum Cron Job limit. Your next remind is at: %s", cronJobs[0]))
-			return
-		}
+
 		Client.ChannelMessageSend(origin, "Adding...")
-		NewCron(content, buff)
+		Cron(content, buff)
 	default:
 		buff.Errors += 1
 		return
