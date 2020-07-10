@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="BranchesTreeState">
+    <expand>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="LOCAL_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+    </expand>
+    <select />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="2c64aef8-1308-4c83-b4e6-caac9b305802" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/core/commands/buffers.go" beforeDir="false" afterPath="$PROJECT_DIR$/core/commands/buffers.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/commands/commands.go" beforeDir="false" afterPath="$PROJECT_DIR$/core/commands/commands.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/commands/image.go" beforeDir="false" afterPath="$PROJECT_DIR$/core/commands/image.go" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="GOROOT" path="/usr/lib/go" />
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectId" id="1e8dzuHUMnDR4VaPW84L2Pfo6OC" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="go.import.settings.migrated" value="true" />
+    <property name="go.sdk.automatically.set" value="true" />
+    <property name="last_opened_file_path" value="$USER_HOME$" />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="2c64aef8-1308-4c83-b4e6-caac9b305802" name="Default Changelist" comment="" />
+      <created>1593707419069</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1593707419069</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="2" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="oldMeFiltersMigrated" value="true" />
+  </component>
+  <component name="WindowStateProjectService">
+    <state x="1581" y="260" width="672" height="678" key="search.everywhere.popup" timestamp="1593710959096">
+      <screen x="1280" y="0" width="1280" height="1024" />
+    </state>
+    <state x="1581" y="260" width="672" height="678" key="search.everywhere.popup/1280.0.1280.1024/0.0.1280.1024@1280.0.1280.1024" timestamp="1593710959096" />
+  </component>
+</project>
